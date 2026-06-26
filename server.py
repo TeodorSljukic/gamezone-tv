@@ -23,6 +23,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import sys
 import webbrowser
 
+# VIDAA (Hisense RemoteNOW) — opcioni modul (treba paho-mqtt + cert fajlovi)
+try:
+    import vidaa
+except Exception:
+    vidaa = None
+
 # Putanje rade i kad je spakovano u .exe (PyInstaller)
 if getattr(sys, "frozen", False):
     RES_DIR = sys._MEIPASS                       # ugrađeni resursi (index.html)
@@ -38,7 +44,7 @@ else:
 
 BASE = RES_DIR
 DATA_FILE = os.path.join(APP_DIR, "stations.json")
-PORT = 8770
+PORT = int(os.environ.get("GAMEZONE_PORT", "8770"))
 
 VERSION = "1.6.0"
 UPDATE_REPO = "TeodorSljukic/gamezone-tv"  # GitHub repo za auto-update
@@ -470,6 +476,13 @@ def control_tv(station, on):
             if on:
                 return (wake_on_lan(mac), "WoL paket poslat")
             return (roku_power_off(ip), "Roku PowerOff")
+        if ctype == "vidaa":
+            # Hisense VIDAA (MQTT 36669). KEY_POWER je toggle -> status-aware.
+            if vidaa is None:
+                return False, "VIDAA modul nedostupan (paho-mqtt?)"
+            woke = wake_on_lan(mac) if (on and mac) else False
+            ok, msg = vidaa.power(ip, on)
+            return (ok or woke), msg
         if ctype == "samsung":
             sidv = station.get("id", "")
             mode = station.get("samsung_mode", "power")
@@ -611,7 +624,9 @@ def classify_device(info):
         return "SAMSUNG", "samsung"
     if "lg" in blob or "webos" in blob:
         return "LG", "lg"
-    if "roku" in blob or "hisense" in blob or "tcl" in blob:
+    if "vidaa" in blob:
+        return "VIDAA", "vidaa"
+    if "roku" in blob or "tcl" in blob or "hisense" in blob:
         return "ROKU", "roku"
     return "OTHER", "http"
 
@@ -644,7 +659,8 @@ def _sony_probe(ip, timeout=1.2):
 
 
 # TV-specificni portovi (aktivno skeniranje, prolazi kroz firewall)
-_TV_PORTS = {8001: "samsung", 8002: "samsung", 3000: "lg", 3001: "lg", 8060: "roku"}
+_TV_PORTS = {8001: "samsung", 8002: "samsung", 3000: "lg", 3001: "lg",
+             8060: "roku", 36669: "vidaa"}
 
 
 def subnet_scan(found):
@@ -664,7 +680,8 @@ def subnet_scan(found):
         for port, ctl in _TV_PORTS.items():
             if _tcp_open(ip, port, 0.3):
                 control = ctl
-                brand = {"samsung": "SAMSUNG", "lg": "LG", "roku": "ROKU"}[ctl]
+                brand = {"samsung": "SAMSUNG", "lg": "LG", "roku": "ROKU",
+                         "vidaa": "VIDAA"}[ctl]
                 break
         if brand is None and _tcp_open(ip, 80, 0.3):
             si = _sony_probe(ip)
@@ -705,7 +722,12 @@ def discover_devices():
         desc["server"] = meta.get("server", "")
         # brend iz SSDP opisa; ako ga nema, iz aktivnog skena
         brand, control = classify_device(desc)
-        if brand == "OTHER" and meta.get("brand"):
+        # Otkrice po OTVORENOM portu (meta) je mjerodavno za protokol
+        # (npr. Hisense VIDAA otvara 36669; ne smije pasti u 'roku').
+        if meta.get("control"):
+            control = meta["control"]
+            brand = meta.get("brand", brand)
+        elif brand == "OTHER" and meta.get("brand"):
             brand, control = meta["brand"], meta["control"]
         model = desc.get("modelName", "") or meta.get("model", "")
         name = desc.get("friendlyName") or model or f"{brand} TV" if brand != "OTHER" else (desc.get("friendlyName") or ip)
@@ -837,6 +859,9 @@ def _enforce_off(sid):
                 _http(url, timeout=4)
         elif ctype == "roku":
             roku_power_off(scopy.get("ip", ""))
+        elif ctype == "vidaa":
+            if vidaa is not None:
+                vidaa.power(scopy.get("ip", ""), False)  # status-aware: nece upaliti ugasen
         elif ctype == "lg":
             ok, nk, _ = lg_turn_off(scopy.get("ip", ""), scopy.get("lg_key", ""))
             if nk:
@@ -1196,8 +1221,25 @@ class Handler(BaseHTTPRequestHandler):
                         self._send({"ok": True, "msg": f"Sony status: {st}"})
                     except Exception as e:
                         self._send({"ok": False, "msg": f"Greška: {str(e)[:80]}"})
+                elif scopy.get("control") == "vidaa":
+                    if vidaa is None:
+                        self._send({"ok": False, "msg": "VIDAA modul nedostupan"})
+                    else:
+                        st = vidaa.get_state(scopy.get("ip", ""))
+                        self._send({"ok": bool(st), "msg": f"VIDAA status: {st or 'nedostupan'}"})
                 else:
-                    self._send({"ok": True, "msg": "Test dostupan samo za Sony"})
+                    self._send({"ok": True, "msg": "Test dostupan za Sony i VIDAA"})
+                return
+            if action in ("pair", "pin"):
+                # Hisense VIDAA uparivanje: 'pair' izazove PIN, 'pin' ga posalje
+                if vidaa is None:
+                    self._send({"ok": False, "msg": "VIDAA modul nedostupan"}); return
+                ip = scopy.get("ip", "")
+                if action == "pair":
+                    ok, msg = vidaa.pair_start(ip)
+                else:
+                    ok, msg = vidaa.pair_pin(ip, str(body.get("code", "")).strip())
+                self._send({"ok": ok, "msg": msg})
                 return
             on = (action == "on")
             ok, msg = control_tv(scopy, on)  # scopy može dobiti token/key

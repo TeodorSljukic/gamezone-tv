@@ -8,3 +8,9 @@ __pycache__/
 # lokalni podaci (TV konfiguracija/pazar)
 stations.json
 pc-agent/__pycache__/
+# dev/test scratch (VIDAA)
+*.log
+pin.txt
+vidaa_test.py
+tls_probe.py
+vidaa_pair.py

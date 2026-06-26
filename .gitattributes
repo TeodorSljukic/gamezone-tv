@@ -1,0 +1,3 @@
+# VIDAA klijentski cert/kljuc — bez EOL konverzije (da PEM ostane ispravan)
+rcm_certchain_pem.cer -text
+rcm_pem_privkey.pkcs8 -text

@@ -239,6 +239,7 @@
           <option value="samsung">Samsung TV (Tizen, mrežno)</option>
           <option value="lg">LG TV (webOS, mrežno)</option>
           <option value="roku">Hisense/TCL TV (Roku)</option>
+          <option value="vidaa">Hisense VIDAA TV (RemoteNOW)</option>
           <option value="pc">💻 Računar / PC (agent zaključava)</option>
           <option value="http">Univerzalni HTTP (utičnica/custom)</option>
           <option value="wol">Samo paljenje (WoL)</option>
@@ -256,6 +257,17 @@
         <div class="hint" style="background:rgba(255,255,255,.04);border:1px solid var(--line2);border-radius:10px;padding:11px">
           ℹ️ Prvi put kad klikneš <b>Gasi</b>, na TV-u će iskočiti pitanje „Dozvoli povezivanje?" — prihvati daljinskim <b>jednom</b>. Poslije radi samo.
         </div>
+      </div>
+      <div class="only-vidaa">
+        <div class="hint" style="background:rgba(124,92,255,.1);border:1px solid rgba(124,92,255,.3);border-radius:10px;padding:12px;line-height:1.6">
+          📺 <b>Hisense VIDAA:</b> na TV-u uključi <b>Settings → System → Quick Start = ON</b>. Zatim <b>Sačuvaj</b> stanicu, pa je otvori ponovo (Izmjena) i klikni <b>Upari</b> — na TV-u će iskočiti <b>4-cifreni PIN</b>, unesi ga ovdje i pošalji. Uparuje se jednom po TV-u.
+        </div>
+        <div class="fld" id="vidaaPairWrap" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+          <button type="button" class="btn sm" id="vidaaPairBtn">🔗 Upari (pokaži PIN)</button>
+          <input id="f_vidaa_pin" placeholder="PIN (npr. 1234)" inputmode="numeric" style="width:120px" />
+          <button type="button" class="btn sm primary" id="vidaaPinBtn">Pošalji PIN</button>
+        </div>
+        <div class="hint" id="vidaaPairMsg" style="margin-top:6px"></div>
       </div>
       <div class="only-pc">
         <div class="hint" style="background:rgba(124,92,255,.1);border:1px solid rgba(124,92,255,.3);border-radius:10px;padding:12px;line-height:1.6">
@@ -550,7 +562,7 @@ function render(){
 }
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function badge(st){return st==='ACTIVE'?'Igra':st==='EXPIRED'?'Isteklo':'Slobodna';}
-function ctrlLabel(s){return {sony:'Sony '+(s.ip||''),samsung:'Samsung '+(s.ip||''),lg:'LG '+(s.ip||''),roku:'Roku '+(s.ip||''),pc:'💻 Računar (PC)',http:'HTTP utičnica',wol:'WoL'}[s.control]||s.control;}
+function ctrlLabel(s){return {sony:'Sony '+(s.ip||''),samsung:'Samsung '+(s.ip||''),lg:'LG '+(s.ip||''),roku:'Roku '+(s.ip||''),vidaa:'VIDAA '+(s.ip||''),pc:'💻 Računar (PC)',http:'HTTP utičnica',wol:'WoL'}[s.control]||s.control;}
 
 // lokalno odbrojavanje (glatko, bez čekanja servera)
 setInterval(()=>{
@@ -768,11 +780,12 @@ function openModal(s){
 }
 function syncFields(){
   const c=$('f_control').value;
-  const ipTypes=['sony','samsung','lg','roku'];
+  const ipTypes=['sony','samsung','lg','roku','vidaa'];
   document.querySelectorAll('.only-ip').forEach(e=>e.style.display=ipTypes.includes(c)?'block':'none');
   document.querySelectorAll('.only-sony').forEach(e=>e.style.display=(c==='sony')?'block':'none');
   document.querySelectorAll('.only-http').forEach(e=>e.style.display=(c==='http')?'block':'none');
   document.querySelectorAll('.only-pair').forEach(e=>e.style.display=(c==='samsung'||c==='lg')?'block':'none');
+  document.querySelectorAll('.only-vidaa').forEach(e=>e.style.display=(c==='vidaa')?'block':'none');
   document.querySelectorAll('.only-pc').forEach(e=>e.style.display=(c==='pc')?'block':'none');
 }
 $('f_control').addEventListener('change',syncFields);
@@ -866,6 +879,24 @@ $('saveBtn').onclick=async()=>{
     price_per_hour:parseFloat($('f_price').value)||0};
   await api('/api/stations','POST',body);
   $('ov').classList.remove('show'); toast('Sačuvano'); load();
+};
+// ── VIDAA uparivanje (PIN) ──
+$('vidaaPairBtn').onclick=async()=>{
+  const id=$('f_id').value;
+  if(!id){ $('vidaaPairMsg').textContent='Prvo Sačuvaj stanicu, pa otvori Izmjenu i klikni Upari.'; return; }
+  $('vidaaPairMsg').textContent='⏳ Tražim PIN na TV-u…';
+  try{ const r=await api(`/api/stations/${id}/tv`,'POST',{action:'pair'});
+    $('vidaaPairMsg').textContent=(r.ok?'✅ ':'❌ ')+r.msg;
+  }catch(e){ $('vidaaPairMsg').textContent='Greška: '+e.message; }
+};
+$('vidaaPinBtn').onclick=async()=>{
+  const id=$('f_id').value, code=$('f_vidaa_pin').value.trim();
+  if(!id){ $('vidaaPairMsg').textContent='Prvo Sačuvaj stanicu.'; return; }
+  if(!code){ $('vidaaPairMsg').textContent='Unesi PIN sa TV-a.'; return; }
+  $('vidaaPairMsg').textContent='⏳ Šaljem PIN…';
+  try{ const r=await api(`/api/stations/${id}/tv`,'POST',{action:'pin',code});
+    $('vidaaPairMsg').textContent=(r.ok?'✅ ':'❌ ')+r.msg; if(r.ok) toast('VIDAA upareno');
+  }catch(e){ $('vidaaPairMsg').textContent='Greška: '+e.message; }
 };
 // kraj init (gornji init() već poziva load + pakete)
 $('delBtn').onclick=async()=>{

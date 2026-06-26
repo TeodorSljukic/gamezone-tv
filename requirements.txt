@@ -1,0 +1,5 @@
+# GameZone-TV — runtime zavisnosti
+# (sve ostalo je Python stdlib)
+
+# Hisense VIDAA (RemoteNOW) kontrola preko MQTT/TLS (port 36669)
+paho-mqtt>=1.6,<3
