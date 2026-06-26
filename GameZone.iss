@@ -1,5 +1,5 @@
 #define MyAppName "GameZone Igraonica"
-#define MyAppVersion "1.8.0"
+#define MyAppVersion "1.9.0"
 #define MyAppExe "GameZone-TV.exe"
 
 [Setup]

@@ -47,7 +47,7 @@ BASE = RES_DIR
 DATA_FILE = os.path.join(APP_DIR, "stations.json")
 PORT = int(os.environ.get("GAMEZONE_PORT", "8770"))
 
-VERSION = "1.8.0"
+VERSION = "1.9.0"
 UPDATE_REPO = "TeodorSljukic/gamezone-tv"  # GitHub repo za auto-update
 
 _lock = threading.Lock()
@@ -82,6 +82,10 @@ def load_state():
         _state = {"stations": {}}
     if "stations" not in _state:
         _state["stations"] = {}
+    # backfill: upiši id u svaki station dict (stari fajlovi ga nemaju; treba za heal)
+    for _sid, _s in _state["stations"].items():
+        if isinstance(_s, dict) and not _s.get("id"):
+            _s["id"] = _sid
     if "packages" not in _state:
         _state["packages"] = list(DEFAULT_PACKAGES)
     if "history" not in _state:
@@ -489,7 +493,10 @@ def control_tv(station, on):
             if not url:
                 return False, "Nema URL-a"
             st, _ = _http(url, timeout=5)
-            return (200 <= st < 300), f"HTTP {st}"
+            ok = (200 <= st < 300)
+            if not ok:
+                _kick_heal(station)  # možda se IP promijenio (DHCP) -> oporavi u pozadini
+            return ok, f"HTTP {st}"
         if ctype == "wol":
             if on:
                 return (wake_on_lan(mac), "WoL paket poslat")
@@ -502,13 +509,18 @@ def control_tv(station, on):
         if ctype == "roku":
             if on:
                 return (wake_on_lan(mac), "WoL paket poslat")
-            return (roku_power_off(ip), "Roku PowerOff")
+            ok = roku_power_off(ip)
+            if not ok:
+                _kick_heal(station)  # IP se možda promijenio -> oporavi u pozadini
+            return (ok, "Roku PowerOff")
         if ctype == "vidaa":
             # Hisense VIDAA (MQTT 36669). KEY_POWER je toggle -> status-aware.
             if vidaa is None:
                 return False, "VIDAA modul nedostupan (paho-mqtt?)"
             woke = wake_on_lan(mac) if (on and mac) else False
             ok, msg = vidaa.power(ip, on)
+            if not (ok or woke):
+                _kick_heal(station)  # IP se možda promijenio -> oporavi u pozadini
             return (ok or woke), msg
         if ctype == "samsung":
             sidv = station.get("id", "")
@@ -532,6 +544,8 @@ def control_tv(station, on):
             ok, newtok, msg = samsung_power_toggle(ip, station.get("samsung_token", ""))
             if newtok:
                 station["samsung_token"] = newtok
+            if not ok:
+                _kick_heal(station)  # IP se možda promijenio -> oporavi u pozadini
             return ok, f"Samsung OFF ({msg})"
         if ctype == "lg":
             if on:
@@ -540,6 +554,8 @@ def control_tv(station, on):
             ok, newkey, msg = lg_turn_off(ip, station.get("lg_key", ""))
             if newkey:
                 station["lg_key"] = newkey
+            if not ok:
+                _kick_heal(station)  # IP se možda promijenio -> oporavi u pozadini
             return ok, f"LG OFF ({msg})"
         # default: sony
         if on:
@@ -548,10 +564,19 @@ def control_tv(station, on):
                 ok = sony_power(ip, psk, True)
             except Exception:
                 ok = woke
+            if not (ok or woke):
+                _kick_heal(station)  # Sony nedostupan -> možda nova IP, oporavi u pozadini
             return (ok or woke), "Sony ON" + (" + WoL" if mac else "")
-        ok = sony_power(ip, psk, False)
+        try:
+            ok = sony_power(ip, psk, False)
+        except Exception:
+            ok = False
+        if not ok:
+            _kick_heal(station)  # Sony nedostupan -> možda nova IP, oporavi u pozadini
         return ok, "Sony OFF"
     except Exception as e:
+        # IP-bazirana kontrola pukla (handled timeout) -> probaj heal u pozadini
+        _kick_heal(station)
         return False, str(e)[:80]
 
 
@@ -629,15 +654,154 @@ def fetch_desc(location):
         return {}
 
 
-def arp_mac(ip):
-    """MAC iz ARP tabele (za Wake-on-LAN)."""
+_MAC_RE = re.compile(r"((?:[0-9a-fA-F]{2}[-:]){5}[0-9a-fA-F]{2})")
+
+
+def _norm_mac(raw):
+    """Normalizuj MAC u UPPERCASE dvotačka oblik AA:BB:CC:DD:EE:FF. '' ako nije validan."""
+    if not raw:
+        return ""
+    m = _MAC_RE.search(str(raw))
+    if not m:
+        return ""
+    return m.group(1).replace("-", ":").upper()
+
+
+def _arp_query(ip):
+    """Pokreni `arp -a <ip>` i izvuci MAC. Vraća '' i NIKAD ne puca."""
     try:
         out = subprocess.run(["arp", "-a", ip], capture_output=True,
                              text=True, timeout=5).stdout
-        m = re.search(r"((?:[0-9a-fA-F]{2}[-:]){5}[0-9a-fA-F]{2})", out)
-        return m.group(1).replace("-", ":").upper() if m else ""
+        return _norm_mac(out)
     except Exception:
         return ""
+
+
+def arp_mac(ip):
+    """MAC iz ARP tabele (za Wake-on-LAN / auto-heal). MAC je sidro za oporavak,
+    pa se trudimo da ga nađemo: ako prazna ARP tabela -> 'zagrij' je TCP konektom
+    i ping-om, pa probaj ponovo. Sve subprocess pozive obavijamo da ne pucaju."""
+    if not ip:
+        return ""
+    mac = _arp_query(ip)
+    if mac:
+        return mac
+    # ARP keš prazan za ovu IP -> primami neighbor unos (TCP connect + ping)
+    try:
+        _tcp_open(ip, 80, 0.3) or _tcp_open(ip, 8001, 0.3)
+    except Exception:
+        pass
+    try:
+        subprocess.run(["ping", "-n", "1", "-w", "300", ip],
+                       capture_output=True, text=True, timeout=2)
+    except Exception:
+        pass
+    return _arp_query(ip)  # jedan retry poslije zagrijavanja
+
+
+def arp_table_sweep():
+    """Pokreni `arp -a` JEDNOM (bez IP argumenta) i izvuci sve (ip, mac) parove
+    iz OS neighbor keša. Vraća {ip: MAC_UPPER}. Jeftino i NIKAD ne puca."""
+    out = {}
+    try:
+        text = subprocess.run(["arp", "-a"], capture_output=True,
+                              text=True, timeout=5).stdout
+        # svaki red tipa:  192.168.1.5    aa-bb-cc-dd-ee-ff   dynamic
+        ip_re = re.compile(r"(\d{1,3}(?:\.\d{1,3}){3})")
+        for line in text.splitlines():
+            mac = _norm_mac(line)
+            if not mac:
+                continue
+            mi = ip_re.search(line)
+            if mi:
+                out[mi.group(1)] = mac
+    except Exception:
+        pass
+    return out
+
+
+def scan_present_by_mac():
+    """Vrati {MAC_UPPER: ip} za sve trenutno dostupne uređaje na mreži.
+    Korak 1: subnet_scan (puni ARP keš preko TCP konekcija).
+    Korak 2: arp_table_sweep (pokupi sve iz neighbor keša).
+    Korak 3: za nađene IP bez MAC-a -> ciljani arp_mac(ip). NIKAD ne puca."""
+    found = {}
+    try:
+        subnet_scan(found)
+    except Exception:
+        pass
+    by_mac = {}
+    try:
+        sweep = arp_table_sweep()
+        for ip, mac in sweep.items():
+            if mac:
+                by_mac[mac] = ip
+        # za IP koje je skener našao a nisu u sweep-u -> ciljani upit
+        for ip in list(found.keys()):
+            if ip not in sweep:
+                mac = arp_mac(ip)
+                if mac:
+                    by_mac.setdefault(mac, ip)
+    except Exception:
+        pass
+    return by_mac
+
+
+def heal_station_ip(sid):
+    """Jezgro auto-heal-a (NEDESTRUKTIVNO — NIKAD ne briše IP stanice).
+    Čita MAC + trenutnu IP pod lockom, skenira mrežu IZVAN locka, pa ako se MAC
+    javi na NOVOJ IP -> ažurira ip. Ako se MAC ne javi (TV ugašen) -> ne dira IP.
+    Vraća novu IP ako je promijenjena, inače None. Guard-ovano da ne puca."""
+    try:
+        with _lock:
+            s = _state["stations"].get(sid)
+            if not s:
+                return None
+            if s.get("_heal_inflight"):
+                return None  # već radi heal za ovu stanicu -> ne gomilaj
+            mac = _norm_mac(s.get("mac", ""))
+            old_ip = s.get("ip", "")
+            if not mac:
+                return None  # nema MAC -> ne možemo da oporavimo
+            s["_heal_inflight"] = True
+        try:
+            present = scan_present_by_mac()  # mrežni I/O IZVAN locka
+        finally:
+            with _lock:
+                s = _state["stations"].get(sid)
+                if s:
+                    s["_heal_inflight"] = False
+        new_ip = present.get(mac, "")
+        if new_ip and new_ip != old_ip:
+            with _lock:
+                s = _state["stations"].get(sid)
+                if not s:
+                    return None
+                s["ip"] = new_ip
+                s["last_action"] = f"Auto-heal: IP {old_ip}→{new_ip}"
+                s["_ip_healed_at"] = time.time()
+                save_state()
+            return new_ip
+        # MAC nije nađen (TV ugašen/odsutan) -> NE diraj IP, samo zabilježi
+        with _lock:
+            s = _state["stations"].get(sid)
+            if s:
+                s["_ip_unverified_at"] = time.time()
+        return None
+    except Exception:
+        return None
+
+
+def _kick_heal(station):
+    """Pokreni heal_station_ip u pozadini (daemon nit) ako stanica ima id + MAC.
+    Ne blokira poziv koji ga je pozvao i ne mijenja njegov rezultat."""
+    try:
+        sid = station.get("id", "")
+        if sid and _norm_mac(station.get("mac", "")):
+            threading.Thread(target=heal_station_ip, args=(sid,),
+                             daemon=True).start()
+    except Exception:
+        pass
 
 
 def classify_device(info):
@@ -771,6 +935,32 @@ def discover_devices():
             "is_tv": is_tv,
         })
     results.sort(key=lambda x: (not x["is_tv"], str(x["name"]).lower()))
+    # Besplatan heal: kad operater skenira, uskladi IP postojećih stanica po MAC-u.
+    # Ako stanica ima taj MAC ali na DRUGOJ IP -> ažuriraj (NEDESTRUKTIVNO).
+    try:
+        disc_by_mac = {}
+        for d in results:
+            m = _norm_mac(d.get("mac", ""))
+            if m and d.get("ip"):
+                disc_by_mac.setdefault(m, d["ip"])
+        if disc_by_mac:
+            changed = False
+            with _lock:
+                for s in _state["stations"].values():
+                    sm = _norm_mac(s.get("mac", ""))
+                    if not sm:
+                        continue
+                    new_ip = disc_by_mac.get(sm, "")
+                    if new_ip and new_ip != s.get("ip", ""):
+                        old_ip = s.get("ip", "")
+                        s["ip"] = new_ip
+                        s["last_action"] = f"Skeniranje: IP {old_ip}→{new_ip}"
+                        s["_ip_healed_at"] = time.time()
+                        changed = True
+                if changed:
+                    save_state()
+    except Exception as e:
+        print("discover heal err:", e)
     return results
 
 
@@ -800,9 +990,21 @@ def station_public(sid, s):
     if elapsed < 0:
         elapsed = 0
     live_amount = round(elapsed / 3600.0 * pph, 2) if is_open else 0
+    # Mrežni status za UI: 'healed' (skoro oporavljena IP), 'unverified' (TV se nije
+    # javio pri zadnjem pokušaju), inače 'ok'. Jeftino — samo poređenje vremena.
+    healed_at = s.get("_ip_healed_at", 0) or 0
+    unverified_at = s.get("_ip_unverified_at", 0) or 0
+    if now - healed_at < 120:
+        net_status = "healed"
+    elif now - unverified_at < 120:
+        net_status = "unverified"
+    else:
+        net_status = "ok"
     return {
         "id": sid,
         "name": s.get("name", ""),
+        "has_mac": bool(s.get("mac")),
+        "net_status": net_status,
         "control": s.get("control", "sony"),
         "ip": s.get("ip", ""),
         "mac": s.get("mac", ""),
@@ -1128,6 +1330,7 @@ class Handler(BaseHTTPRequestHandler):
             with _lock:
                 s = _state["stations"].get(sid, {"status": "IDLE", "tv_on": False})
                 s.update({
+                    "id": sid,  # upiši id u sam dict (treba za _kick_heal i Samsung pozadinske niti)
                     "name": body.get("name", s.get("name", "Stanica")),
                     "control": body.get("control", s.get("control", "sony")),
                     "ip": body.get("ip", s.get("ip", "")),
