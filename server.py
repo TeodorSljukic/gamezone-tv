@@ -40,7 +40,7 @@ BASE = RES_DIR
 DATA_FILE = os.path.join(APP_DIR, "stations.json")
 PORT = 8770
 
-VERSION = "1.5.1"
+VERSION = "1.5.2"
 UPDATE_REPO = "TeodorSljukic/gamezone-tv"  # GitHub repo za auto-update
 
 _lock = threading.Lock()
@@ -1273,9 +1273,16 @@ def apply_update(asset_url):
     def _run_and_exit():
         time.sleep(1.0)
         try:
-            subprocess.Popen([dest], close_fds=True)
+            # Tiha instalacija (Inno): bez wizarda, zatvori i ponovo upali aplikaciju
+            subprocess.Popen(
+                [dest, "/SILENT", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS", "/NOCANCEL"],
+                close_fds=True)
         except Exception as e:
             print("update launch err:", e)
+            try:
+                subprocess.Popen([dest], close_fds=True)  # rezerva: pokreni normalno
+            except Exception:
+                pass
         os._exit(0)
 
     threading.Thread(target=_run_and_exit, daemon=True).start()

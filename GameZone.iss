@@ -1,5 +1,5 @@
 #define MyAppName "GameZone Igraonica"
-#define MyAppVersion "1.5.1"
+#define MyAppVersion "1.5.2"
 #define MyAppExe "GameZone-TV.exe"
 
 [Setup]
@@ -41,4 +41,4 @@ Name: "{autodesktop}\GameZone Igraonica"; Filename: "{app}\{#MyAppExe}"; Tasks: 
 Name: "{userstartup}\GameZone Igraonica"; Filename: "{app}\{#MyAppExe}"; Tasks: startup
 
 [Run]
-Filename: "{app}\{#MyAppExe}"; Description: "Pokreni GameZone sad"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExe}"; Description: "Pokreni GameZone sad"; Flags: nowait postinstall
