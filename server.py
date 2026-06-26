@@ -18,6 +18,7 @@ import threading
 import time
 import uuid
 import urllib.request
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import sys
@@ -46,7 +47,7 @@ BASE = RES_DIR
 DATA_FILE = os.path.join(APP_DIR, "stations.json")
 PORT = int(os.environ.get("GAMEZONE_PORT", "8770"))
 
-VERSION = "1.7.0"
+VERSION = "1.8.0"
 UPDATE_REPO = "TeodorSljukic/gamezone-tv"  # GitHub repo za auto-update
 
 _lock = threading.Lock()
@@ -58,12 +59,27 @@ _state = {"stations": {}}  # id -> station dict
 # ──────────────────────────────────────────────────────────
 def load_state():
     global _state
+    loaded = False
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 _state = json.load(f)
-        except Exception:
-            _state = {"stations": {}}
+            loaded = True
+        except Exception as e:
+            print("load error (glavni fajl):", e)
+    if not loaded:
+        # glavni fajl ne postoji ili je oštećen -> probaj backup (čuva pazar)
+        bak = DATA_FILE + ".bak"
+        if os.path.exists(bak):
+            try:
+                with open(bak, "r", encoding="utf-8") as f:
+                    _state = json.load(f)
+                loaded = True
+                print("load: vraćeno iz backup-a", bak)
+            except Exception as e:
+                print("load error (backup):", e)
+    if not loaded:
+        _state = {"stations": {}}
     if "stations" not in _state:
         _state["stations"] = {}
     if "packages" not in _state:
@@ -134,8 +150,18 @@ def daily_by_station(date=None):
 
 def save_state():
     try:
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
+        tmp = DATA_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(_state, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        # napravi backup trenutnog fajla (best-effort) prije atomske zamjene
+        if os.path.exists(DATA_FILE):
+            try:
+                shutil.copyfile(DATA_FILE, DATA_FILE + ".bak")
+            except Exception as be:
+                print("save backup warn:", be)
+        os.replace(tmp, DATA_FILE)  # atomska zamjena
     except Exception as e:
         print("save error:", e)
 
@@ -422,9 +448,10 @@ def lg_turn_off(ip, client_key):
     new_key = client_key
     try:
         _ws_send(sock, json.dumps({"type": "register", "id": "reg0", "payload": payload}))
-        # čeka registered (prvi put traži prihvat na TV-u)
-        for _ in range(6):
-            msg = _ws_recv(sock, timeout=12)
+        # čeka registered (prvi put traži prihvat na TV-u).
+        # Cap: 4×5s=20s max (umjesto 6×12s=72s) da nedostupan LG ne blokira nit > 1 min.
+        for _ in range(4):
+            msg = _ws_recv(sock, timeout=5)
             if not msg:
                 break
             try:
@@ -803,18 +830,30 @@ def timer_loop():
     while True:
         try:
             now = time.time()
-            changed = False
+            expired = []  # [(sid, scopy), ...]
             with _lock:
                 for sid, s in _state["stations"].items():
                     if s.get("status") == "ACTIVE" and s.get("ends_at") and now >= s["ends_at"]:
-                        ok, msg = control_tv(s, False)
+                        # pod lockom samo postavi stanje + napravi kopiju (bez mrežnog I/O)
                         s["status"] = "EXPIRED"
                         s["tv_on"] = False
-                        s["last_action"] = f"Isteklo → TV OFF ({msg})"
-                        changed = True
-                        print(f"[{s.get('name')}] vrijeme isteklo → gašenje TV: {ok} {msg}")
-                if changed:
+                        expired.append((sid, dict(s)))
+                if expired:
                     save_state()
+            # mrežno gašenje IZVAN locka (nedostupan TV ne smije da zamrzne server)
+            for sid, scopy in expired:
+                ok, msg = control_tv(scopy, False)
+                print(f"[{scopy.get('name')}] vrijeme isteklo → gašenje TV: {ok} {msg}")
+                with _lock:
+                    s = _state["stations"].get(sid)
+                    if s:
+                        s["last_action"] = f"Isteklo → TV OFF ({msg})"
+                        # sačuvaj eventualni novi token/key
+                        if scopy.get("samsung_token"):
+                            s["samsung_token"] = scopy["samsung_token"]
+                        if scopy.get("lg_key"):
+                            s["lg_key"] = scopy["lg_key"]
+                        save_state()
         except Exception as e:
             print("timer error:", e)
         time.sleep(1)
@@ -834,6 +873,7 @@ def _enforce_off(sid):
         # grace period: tek pokrenuto/produzeno -> ne gasi (da paljenje stigne)
         if s.get("_no_enforce_until", 0) > time.time():
             return
+        s["_enforce_inflight"] = True  # spriječi gomilanje niti na sporom/nedostupnom TV-u
         scopy = dict(s)
     ctype = scopy.get("control", "")
     try:
@@ -871,6 +911,11 @@ def _enforce_off(sid):
                         s["lg_key"] = nk
     except Exception:
         pass
+    finally:
+        with _lock:
+            s = _state["stations"].get(sid)
+            if s:
+                s["_enforce_inflight"] = False
 
 
 def enforce_loop():
@@ -878,6 +923,12 @@ def enforce_loop():
     while True:
         try:
             now = time.time()
+            # počisti zaostale pending pairing sesije (jeftino, svake sekunde)
+            if vidaa is not None:
+                try:
+                    vidaa.reap_pending()
+                except Exception:
+                    pass
             with _lock:
                 on = _state.get("enforce_remote", True)
                 items = list(_state["stations"].items())
@@ -888,10 +939,12 @@ def enforce_loop():
                     if s.get("_no_enforce_until", 0) > now:
                         continue
                     # Samsung sad ukljucen (status-aware u _enforce_off, bez rizika da upali)
-                    if s.get("control", "") not in ("sony", "http", "roku", "lg", "samsung"):
+                    if s.get("control", "") not in ("sony", "http", "roku", "lg", "samsung", "vidaa"):
                         continue
                     if now - s.get("_last_enforce", 0) < ENFORCE_INTERVAL:
                         continue
+                    if s.get("_enforce_inflight"):
+                        continue  # već radi nit za ovu stanicu -> ne gomilaj
                     with _lock:
                         st = _state["stations"].get(sid)
                         if st:
@@ -920,9 +973,23 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _query(self):
+        """Sigurno parsiranje query stringa -> ravan dict (prva vrijednost po ključu).
+        Ne puca na lošem inputu (npr. '?a' bez '=' ili dupli '&&')."""
+        try:
+            qs = urllib.parse.urlparse(self.path).query
+            return {k: v[0] for k, v in urllib.parse.parse_qs(qs).items()}
+        except Exception:
+            return {}
+
     def _read_json(self):
-        length = int(self.headers.get("Content-Length", 0) or 0)
-        if not length:
+        try:
+            length = int(self.headers.get("Content-Length", 0) or 0)
+        except (TypeError, ValueError):
+            return {}  # ne-numerički header ne smije da puca
+        if length <= 0:
+            return {}
+        if length > 1_000_000:  # cap 1 MB — ignoriši prevelika tijela
             return {}
         try:
             return json.loads(self.rfile.read(length).decode("utf-8"))
@@ -931,6 +998,16 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- GET ----
     def do_GET(self):
+        # Hardening: bilo koja neuhvaćena greška -> 500 JSON (server bind-uje 0.0.0.0)
+        try:
+            self._do_GET()
+        except Exception as e:
+            try:
+                self._send({"error": str(e)[:160]}, status=500)
+            except Exception:
+                pass
+
+    def _do_GET(self):
         path = self.path.split("?")[0]
         if path == "/" or path == "/index.html":
             try:
@@ -972,7 +1049,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/agent":
             # PC agent pita za svoje stanje. ?id=<sid>
-            q = dict(p.split("=") for p in self.path.split("?")[1].split("&")) if "?" in self.path else {}
+            q = self._query()
             sid = q.get("id", "")
             with _lock:
                 s = _state["stations"].get(sid)
@@ -993,17 +1070,17 @@ class Handler(BaseHTTPRequestHandler):
                 })
             return
         if path == "/api/summary":
-            q = dict(p.split("=") for p in self.path.split("?")[1].split("&")) if "?" in self.path else {}
+            q = self._query()
             with _lock:
                 self._send(daily_summary(q.get("date")))
             return
         if path == "/api/report":
-            q = dict(p.split("=") for p in self.path.split("?")[1].split("&")) if "?" in self.path else {}
+            q = self._query()
             with _lock:
                 self._send(daily_by_station(q.get("date")))
             return
         if path == "/api/history":
-            q = dict(p.split("=") for p in self.path.split("?")[1].split("&")) if "?" in self.path else {}
+            q = self._query()
             date = q.get("date", today_str())
             with _lock:
                 rows = [h for h in _state.get("history", []) if (date == "all" or h.get("date") == date)]
@@ -1011,7 +1088,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send({"history": rows, "summary": daily_summary(None if date == "all" else date)})
             return
         if path == "/api/history.csv":
-            q = dict(p.split("=") for p in self.path.split("?")[1].split("&")) if "?" in self.path else {}
+            q = self._query()
             date = q.get("date", today_str())
             with _lock:
                 rows = [h for h in _state.get("history", []) if (date == "all" or h.get("date") == date)]
@@ -1033,6 +1110,16 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- POST ----
     def do_POST(self):
+        # Hardening: bilo koja neuhvaćena greška -> 500 JSON (server bind-uje 0.0.0.0)
+        try:
+            self._do_POST()
+        except Exception as e:
+            try:
+                self._send({"error": str(e)[:160]}, status=500)
+            except Exception:
+                pass
+
+    def _do_POST(self):
         path = self.path.split("?")[0]
         body = self._read_json()
 
@@ -1116,9 +1203,21 @@ class Handler(BaseHTTPRequestHandler):
                 s["ends_at"] = None
                 s["paid"] = 0
                 s["session_minutes"] = 0
-                s["_no_enforce_until"] = time.time() + 5
-                ok, msg = control_tv(s, True)
-                s["tv_on"] = True
+                s["_no_enforce_until"] = time.time() + 5  # cuvar odmah vidi grace
+                s["_samsung_cd"] = 0       # ponisti raniji backoff
+                s["_samsung_fails"] = 0
+                scopy = dict(s)            # kopija za mrežni I/O van locka
+            # paljenje TV-a IZVAN locka (nedostupan TV ne zamrzava server)
+            ok, msg = control_tv(scopy, True)
+            with _lock:
+                s = _state["stations"].get(sid)
+                if not s:
+                    self._send({"error": "nema stanice"}, status=404); return
+                s["tv_on"] = bool(ok)
+                if scopy.get("samsung_token"):
+                    s["samsung_token"] = scopy["samsung_token"]
+                if scopy.get("lg_key"):
+                    s["lg_key"] = scopy["lg_key"]
                 s["last_action"] = "Slobodno — počelo (kuca)"
                 save_state()
                 out = station_public(sid, s)
@@ -1140,11 +1239,24 @@ class Handler(BaseHTTPRequestHandler):
                 s["ends_at"] = time.time() + minutes * 60
                 s["paid"] = amount
                 s["session_minutes"] = int(minutes)
-                s["_no_enforce_until"] = time.time() + 5  # cuvar ne dira dok se pali
-                ok, msg = control_tv(s, True)
-                s["tv_on"] = True
-                s["last_action"] = f"Start {int(minutes)}min · {amount:.2f}€ (TV ON)"
+                s["_no_enforce_until"] = time.time() + 5  # cuvar ne dira dok se pali (odmah vidljivo)
+                s["_samsung_cd"] = 0       # ponisti raniji backoff
+                s["_samsung_fails"] = 0
                 record_payment(sid, s.get("name", ""), minutes, amount, "start")
+                save_state()
+                scopy = dict(s)            # kopija za mrežni I/O van locka
+            # paljenje TV-a IZVAN locka
+            ok, msg = control_tv(scopy, True)
+            with _lock:
+                s = _state["stations"].get(sid)
+                if not s:
+                    self._send({"error": "nema stanice"}, status=404); return
+                s["tv_on"] = bool(ok)      # istinito stanje, ne bezuslovno True
+                if scopy.get("samsung_token"):
+                    s["samsung_token"] = scopy["samsung_token"]
+                if scopy.get("lg_key"):
+                    s["lg_key"] = scopy["lg_key"]
+                s["last_action"] = f"Start {int(minutes)}min · {amount:.2f}€ (TV ON)"
                 save_state()
                 out = station_public(sid, s)
             self._send({"ok": True, "station": out})
@@ -1166,12 +1278,26 @@ class Handler(BaseHTTPRequestHandler):
                 s["status"] = "ACTIVE"
                 s["paid"] = round(float(s.get("paid", 0) or 0) + amount, 2)
                 s["session_minutes"] = int(s.get("session_minutes", 0) or 0) + int(minutes)
-                s["_no_enforce_until"] = time.time() + 5  # cuvar ne dira dok se pali
-                if not s.get("tv_on"):
-                    control_tv(s, True)
-                    s["tv_on"] = True
+                s["_no_enforce_until"] = time.time() + 5  # cuvar ne dira dok se pali (odmah vidljivo)
+                s["_samsung_cd"] = 0       # ponisti raniji backoff
+                s["_samsung_fails"] = 0
                 s["last_action"] = f"Doplata +{int(minutes)}min · {amount:.2f}€"
                 record_payment(sid, s.get("name", ""), minutes, amount, "extend")
+                save_state()
+                scopy = dict(s)            # kopija za mrežni I/O van locka
+            # produzenje znaci da TV treba da bude upaljen -> probaj paljenje
+            # bez obzira na (mozda zastario) tv_on flag. control_tv je status-aware.
+            ok, msg = control_tv(scopy, True)
+            with _lock:
+                s = _state["stations"].get(sid)
+                if not s:
+                    self._send({"error": "nema stanice"}, status=404); return
+                if ok:
+                    s["tv_on"] = True
+                if scopy.get("samsung_token"):
+                    s["samsung_token"] = scopy["samsung_token"]
+                if scopy.get("lg_key"):
+                    s["lg_key"] = scopy["lg_key"]
                 save_state()
                 out = station_public(sid, s)
             self._send({"ok": True, "station": out})
@@ -1191,12 +1317,23 @@ class Handler(BaseHTTPRequestHandler):
                     pph = effective_pph(s)
                     charged = round(elapsed / 3600.0 * pph, 2)
                     record_payment(sid, s.get("name", ""), charged_min, charged, "open")
-                ok, msg = control_tv(s, False)
                 s["status"] = "IDLE"
                 s["open"] = False
                 s["started_at"] = None
                 s["ends_at"] = None
                 s["tv_on"] = False
+                save_state()
+                scopy = dict(s)            # kopija za mrežni I/O van locka
+            # gašenje TV-a IZVAN locka (nedostupan TV ne zamrzava server)
+            ok, msg = control_tv(scopy, False)
+            with _lock:
+                s = _state["stations"].get(sid)
+                if not s:
+                    self._send({"error": "nema stanice"}, status=404); return
+                if scopy.get("samsung_token"):
+                    s["samsung_token"] = scopy["samsung_token"]
+                if scopy.get("lg_key"):
+                    s["lg_key"] = scopy["lg_key"]
                 if charged_min:
                     s["last_action"] = f"Slobodno gotovo: {charged_min} min · {charged:.2f}€"
                 else:

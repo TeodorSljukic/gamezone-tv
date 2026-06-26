@@ -72,7 +72,15 @@ def _new_client():
 
 
 def _is_off(statetype):
-    return bool(statetype) and str(statetype).startswith("fake_sleep")
+    if not statetype:
+        return False
+    st = str(statetype).lower()
+    if st.startswith("fake_sleep") or "standby" in st or "powered_off" in st:
+        return True
+    # nepoznat statetype -> loguj da naucimo prave vrijednosti (tretiramo kao 'nije off')
+    if st not in ("on", "normal", "live", "app"):
+        print("VIDAA nepoznat statetype:", statetype)
+    return False
 
 
 class _Session:
@@ -165,6 +173,9 @@ def power(ip, on, timeout=8):
     Vraca (ok, poruka)."""
     st = get_state(ip, timeout)
     if st == "":
+        if not on:
+            # OFF + nepoznato stanje: NE diraj (KEY_POWER je toggle -> mogli bismo upaliti ugasen TV)
+            return True, "VIDAA: nedostupan/ugašen - ne diram"
         ok = send_key(ip, "KEY_POWER", timeout)
         return ok, "VIDAA: stanje nepoznato, poslat KEY_POWER"
     cur_on = (st == "on")
@@ -177,8 +188,24 @@ def power(ip, on, timeout=8):
 
 
 # ── Pairing: drzi otvorenu sesiju izmedju 'pair_start' i 'pair_pin' ──
-_pending = {}            # ip -> _Session
+_pending = {}            # ip -> (_Session, ts)  (ts = kad je sesija otvorena)
 _pending_lock = threading.Lock()
+
+
+def reap_pending(max_age=90):
+    """Zatvori i izbaci pending sesije starije od max_age sekundi (ako pair_pin nikad
+    ne stigne). Sprjecava curenje niti/socketa. Zove se periodicno iz servera."""
+    now = time.time()
+    stale = []
+    with _pending_lock:
+        for ip, (s, ts) in list(_pending.items()):
+            if now - ts > max_age:
+                stale.append(_pending.pop(ip)[0])
+    for s in stale:
+        try:
+            s.close()
+        except Exception:
+            pass
 
 
 def pair_start(ip, timeout=8):
@@ -186,7 +213,7 @@ def pair_start(ip, timeout=8):
     with _pending_lock:
         old = _pending.pop(ip, None)
     if old:
-        old.close()
+        old[0].close()
     s = _Session(ip)
     if not s.open(timeout):
         s.close()
@@ -195,16 +222,17 @@ def pair_start(ip, timeout=8):
     time.sleep(0.4)
     s.c.publish(T_UI % "authentication", "")
     with _pending_lock:
-        _pending[ip] = s
+        _pending[ip] = (s, time.time())
     return True, "PIN bi trebao da se pojavi na TV-u — unesi ga"
 
 
 def pair_pin(ip, code, timeout=8):
     """Posalji PIN u VEC otvorenoj sesiji (od pair_start). Vrati (ok, poruka)."""
     with _pending_lock:
-        s = _pending.get(ip)
-    if not s:
+        entry = _pending.get(ip)
+    if not entry:
         return False, "Nema aktivnog uparivanja — prvo klikni 'Upari'"
+    s = entry[0]
     s.auth_result = None
     s.c.publish(T_UI % "authenticationcode", json.dumps({"authNum": str(code)}))
     t0 = time.time()
