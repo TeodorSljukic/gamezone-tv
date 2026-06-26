@@ -47,7 +47,7 @@ BASE = RES_DIR
 DATA_FILE = os.path.join(APP_DIR, "stations.json")
 PORT = int(os.environ.get("GAMEZONE_PORT", "8770"))
 
-VERSION = "1.9.0"
+VERSION = "1.10.0"
 UPDATE_REPO = "TeodorSljukic/gamezone-tv"  # GitHub repo za auto-update
 
 _lock = threading.Lock()
@@ -919,9 +919,9 @@ def discover_devices():
             control = meta["control"]
             brand = meta.get("brand", brand)
         elif brand == "OTHER" and meta.get("brand"):
-            brand, control = meta["brand"], meta["control"]
+            brand, control = meta.get("brand", brand), meta.get("control", control)
         model = desc.get("modelName", "") or meta.get("model", "")
-        name = desc.get("friendlyName") or model or f"{brand} TV" if brand != "OTHER" else (desc.get("friendlyName") or ip)
+        name = (desc.get("friendlyName") or model or f"{brand} TV") if brand != "OTHER" else (desc.get("friendlyName") or ip)
         text = (desc.get("friendlyName", "") + " " + model + " " + meta.get("st", "")).lower()
         is_tv = brand != "OTHER" or "tv" in text or "bravia" in text or "mediarenderer" in text
         results.append({

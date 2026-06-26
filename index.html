@@ -204,6 +204,7 @@
       <button class="btn" id="enforceBtn" title="Drži TV ugašen dok nije plaćeno (anti-daljinac)">🛡️ Anti-daljinac: …</button>
       <button class="btn" id="soundBtn" title="Zvuk uključen/isključen">🔔</button>
       <button class="btn" id="scanBtn">🔍 Skeniraj</button>
+      <button class="btn" id="helpBtn" title="Podešavanje TV-a po brendu">❓ Pomoć</button>
       <button class="btn primary" id="addBtn">＋ Dodaj stanicu</button>
       <button class="btn" id="quitBtn" title="Izađi iz programa" style="border-color:rgba(255,88,118,.4);color:#ff9aaa">⏻</button>
     </div>
@@ -303,6 +304,46 @@
         <button class="btn ghost" id="scanRefresh">↻ Skeniraj ponovo</button>
         <button class="btn primary" id="scanClose">Zatvori</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Pomoć: podešavanje TV-a po brendu -->
+  <div class="ov" id="helpOv">
+    <div class="modal" style="max-width:560px">
+      <h3>❓ Podešavanje TV-a po brendu</h3>
+      <div class="hint" style="background:rgba(124,92,255,.1);border:1px solid rgba(124,92,255,.3);border-radius:10px;padding:12px;line-height:1.6;margin-bottom:14px">
+        Skoro svaki TV u standby-ju ugasi mrežu — ova podešavanja drže mrežu živom da program može da ga pali/gasi. Uradi jednom po TV-u.
+      </div>
+
+      <div style="margin-bottom:13px">
+        <div style="font-weight:800;font-size:14px;margin-bottom:4px">📺 Sony Bravia</div>
+        <div class="hint" style="margin:0">Postavke → Mreža → Kućna mreža → IP Control: Uključi (Both). Postavi Pre-Shared Key (isti upiši u program). Postavke → Mreža → Remote Start / Daljinsko paljenje: Uključi.</div>
+      </div>
+      <div style="margin-bottom:13px">
+        <div style="font-weight:800;font-size:14px;margin-bottom:4px">📺 Samsung</div>
+        <div class="hint" style="margin:0">Postavke → Opšte → Mreža → Stručne postavke → „Power On with Mobile / Uključivanje mobilnim": Uključi. Najbolje TV na LAN kabl. Prvi put prihvati „Dozvoli povezivanje?" na TV-u.</div>
+      </div>
+      <div style="margin-bottom:13px">
+        <div style="font-weight:800;font-size:14px;margin-bottom:4px">📺 LG (webOS)</div>
+        <div class="hint" style="margin:0">Postavke → Mreža → „Mobile TV On / Always Ready": Uključi. Prvi put prihvati uparivanje na TV-u.</div>
+      </div>
+      <div style="margin-bottom:13px">
+        <div style="font-weight:800;font-size:14px;margin-bottom:4px">📺 Roku / Hisense Roku / TCL</div>
+        <div class="hint" style="margin:0">Settings → System → Power → „Fast TV start": ON. Settings → System → Advanced → „Control by mobile apps / Network access": Permissive.</div>
+      </div>
+      <div style="margin-bottom:13px">
+        <div style="font-weight:800;font-size:14px;margin-bottom:4px">📺 Hisense VIDAA</div>
+        <div class="hint" style="margin:0">Settings → System → „Quick Start / Brzo pokretanje": ON. Dozvoli mobilnu kontrolu (RemoteNOW). U programu: Upari (PIN sa TV-a).</div>
+      </div>
+      <div style="margin-bottom:13px">
+        <div style="font-weight:800;font-size:14px;margin-bottom:4px">🔌 Univerzalni HTTP (utičnica)</div>
+        <div class="hint" style="margin:0">Upiši on/off URL uređaja (npr. Shelly: http://IP/relay/0?turn=on i ...turn=off).</div>
+      </div>
+
+      <div class="hint" style="background:rgba(255,203,91,.1);border:1px solid rgba(255,203,91,.3);border-radius:10px;padding:11px;line-height:1.6;margin-top:6px">
+        💡 Najpouzdanije: daj svakom TV-u fiksnu IP na ruteru. Program i sam traži TV po MAC-u ako se IP promijeni.
+      </div>
+      <div class="modal-actions"><button class="btn primary" id="helpClose">Zatvori</button></div>
     </div>
   </div>
 
@@ -542,7 +583,7 @@ function render(){
     return `<div class="card ${cls}">
       <div class="chead">
         <div><div class="cname">${esc(s.name)}</div>
-          <div class="cmeta">${ctrlLabel(s)} ${s.pph_eff?('· '+s.pph_eff+'€/h'):''}</div></div>
+          <div class="cmeta">${ctrlLabel(s)} ${s.pph_eff?('· '+s.pph_eff+'€/h'):''}${netBadge(s)}${macHint(s)}</div></div>
         <span class="badge ${s.status}">${badge(s.status)}</span>
       </div>
       ${timer}
@@ -563,6 +604,21 @@ function render(){
 function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function badge(st){return st==='ACTIVE'?'Igra':st==='EXPIRED'?'Isteklo':'Slobodna';}
 function ctrlLabel(s){return {sony:'Sony '+(s.ip||''),samsung:'Samsung '+(s.ip||''),lg:'LG '+(s.ip||''),roku:'Roku '+(s.ip||''),vidaa:'VIDAA '+(s.ip||''),pc:'💻 Računar (PC)',http:'HTTP utičnica',wol:'WoL'}[s.control]||s.control;}
+// ── Mrežni status badge (net_status sa servera) ──
+function netBadge(s){
+  if(s.net_status==='healed')
+    return ` <span class="badge" style="background:rgba(25,211,255,.14);color:var(--accent2);border-color:rgba(25,211,255,.3);font-size:9px;padding:3px 7px;letter-spacing:.04em">🔄 IP ažuriran</span>`;
+  if(s.net_status==='unverified')
+    return ` <span class="badge" title="TV ne odgovara — ugašen ili promijenjen IP. Vidi Pomoć za podešavanje." style="background:rgba(255,203,91,.13);color:var(--gold);border-color:rgba(255,203,91,.3);font-size:9px;padding:3px 7px;letter-spacing:.04em">⚠️ nedostupan</span>`;
+  return '';
+}
+// ── Hint: kontrola treba MAC ali ga stanica nema ──
+function macHint(s){
+  const needsMac=['sony','samsung','lg','roku','vidaa'].includes(s.control);
+  if(needsMac && !s.has_mac)
+    return ` <span class="cmeta" title="Dodaj MAC da TV preživi promjenu IP-a — klikni Skeniraj pa Dodaj" style="color:var(--muted)">⚠️ nema MAC</span>`;
+  return '';
+}
 
 // lokalno odbrojavanje (glatko, bez čekanja servera)
 setInterval(()=>{
@@ -827,6 +883,11 @@ $('scanBtn').onclick=()=>{ $('scanOv').classList.add('show'); runScan(); };
 $('scanRefresh').onclick=runScan;
 $('scanClose').onclick=()=>$('scanOv').classList.remove('show');
 $('scanOv').onclick=(e)=>{if(e.target===$('scanOv'))$('scanOv').classList.remove('show');};
+
+// ── Pomoć (podešavanje TV-a po brendu) ──
+$('helpBtn').onclick=()=>$('helpOv').classList.add('show');
+$('helpClose').onclick=()=>$('helpOv').classList.remove('show');
+$('helpOv').onclick=(e)=>{if(e.target===$('helpOv'))$('helpOv').classList.remove('show');};
 
 $('addBtn').onclick=()=>openModal(null);
 $('cancelBtn').onclick=()=>$('ov').classList.remove('show');
