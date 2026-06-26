@@ -40,7 +40,7 @@ BASE = RES_DIR
 DATA_FILE = os.path.join(APP_DIR, "stations.json")
 PORT = 8770
 
-VERSION = "1.5.4"
+VERSION = "1.5.5"
 UPDATE_REPO = "TeodorSljukic/gamezone-tv"  # GitHub repo za auto-update
 
 _lock = threading.Lock()
@@ -349,20 +349,25 @@ def _samsung_wake(sid):
 
 
 def _samsung_off(sid):
-    """Pozadinsko gašenje Samsunga: KEY_POWER samo ako je stvarno upaljen."""
+    """Pozadinsko gašenje Samsunga: KEY_POWER samo ako je stvarno upaljen.
+    KEY_POWER je TOGGLE -> poslije slanja TV se par sekundi i dalje javlja kao 'on'.
+    Zato COOLDOWN: 9s ne diramo TV (inace bi ga ponovo upalio = pali/gasi ciklus)."""
     with _lock:
         s = _state["stations"].get(sid)
         if not s:
             return
+        if s.get("_samsung_cd", 0) > time.time():
+            return  # cooldown: tek smo poslali KEY_POWER, pusti TV da se ugasi
         ip = s.get("ip", ""); token = s.get("samsung_token", "")
     if samsung_get_power(ip) != "on":
         return  # vec ugasen / nedostupan — ne toggluj (da ga ne UPALI)
     ok, ntok, _ = samsung_power_toggle(ip, token)
-    if ntok:
-        with _lock:
-            s = _state["stations"].get(sid)
-            if s:
+    with _lock:
+        s = _state["stations"].get(sid)
+        if s:
+            if ntok:
                 s["samsung_token"] = ntok
+            s["_samsung_cd"] = time.time() + 9  # ne diraj 9s (da se stvarno ugasi)
 
 
 def _samsung_input(sid, want_game):
@@ -1301,22 +1306,23 @@ def lan_ip():
 
 
 def main():
-    # Single-instance: ako je program već upaljen, samo otvori browser i izađi
-    try:
-        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        probe.settimeout(0.5)
-        running = (probe.connect_ex(("127.0.0.1", PORT)) == 0)
-        probe.close()
-    except Exception:
-        running = False
-    if running:
+    load_state()
+    # Zauzmi port; ako je zauzet -> probaj par sekundi (npr. poslije update-a kad se
+    # stara instanca gasi). Tek ako TRAJNO ne uspije -> druga instanca radi, otvori browser.
+    server = None
+    for _ in range(8):
+        try:
+            server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+            break
+        except OSError:
+            time.sleep(1.0)
+    if server is None:
         try:
             webbrowser.open(f"http://127.0.0.1:{PORT}")
         except Exception:
             pass
         return
 
-    load_state()
     threading.Thread(target=timer_loop, daemon=True).start()
     threading.Thread(target=enforce_loop, daemon=True).start()
     ip = lan_ip()
@@ -1337,8 +1343,7 @@ def main():
         threading.Timer(1.2, lambda: webbrowser.open(f"http://127.0.0.1:{PORT}")).start()
     except Exception:
         pass
-    # bind 0.0.0.0 da gaming računari (agenti) i telefon mogu da se povežu
-    server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    # server je već zauzeo port gore (bind 0.0.0.0 — agenti/telefon mogu da se povežu)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
