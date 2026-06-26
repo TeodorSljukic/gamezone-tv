@@ -40,7 +40,7 @@ BASE = RES_DIR
 DATA_FILE = os.path.join(APP_DIR, "stations.json")
 PORT = 8770
 
-VERSION = "1.5.8"
+VERSION = "1.5.9"
 UPDATE_REPO = "TeodorSljukic/gamezone-tv"  # GitHub repo za auto-update
 
 _lock = threading.Lock()
@@ -1270,23 +1270,42 @@ def check_update():
 
 
 def apply_update(asset_url):
-    """Preuzmi installer/exe i pokreni ga, pa ugasi ovaj proces."""
-    dest = os.path.join(os.environ.get("TEMP", APP_DIR), "GameZone-Update.exe")
+    """Preuzmi installer i pokreni ga preko .bat skripte koja PRVO sigurno ugasi
+    aplikaciju (da nema 'fajl zauzet / try again'), pa tiho instalira i ponovo upali."""
+    tmp = os.environ.get("TEMP", APP_DIR)
+    dest = os.path.join(tmp, "GameZone-Update.exe")
     req = urllib.request.Request(asset_url, headers={"User-Agent": "GameZone-Updater"})
-    with urllib.request.urlopen(req, timeout=120) as r, open(dest, "wb") as f:
+    with urllib.request.urlopen(req, timeout=180) as r, open(dest, "wb") as f:
         shutil.copyfileobj(r, f)
 
+    # Skini "Mark of the Web" (skinuto sa interneta) da SmartScreen ne blokira
+    try:
+        os.remove(dest + ":Zone.Identifier")
+    except Exception:
+        pass
+
+    # .bat: sacekaj da se app ugasi -> nasilno ugasi ostatak -> tiho instaliraj
+    bat = os.path.join(tmp, "gamezone-update.bat")
+    exe_name = os.path.basename(sys.executable) if getattr(sys, "frozen", False) else "GameZone-TV.exe"
+    try:
+        with open(bat, "w", encoding="ascii", errors="ignore") as f:
+            f.write("@echo off\r\n")
+            f.write("timeout /t 2 /nobreak >nul\r\n")
+            f.write('taskkill /F /IM "%s" >nul 2>&1\r\n' % exe_name)
+            f.write("timeout /t 1 /nobreak >nul\r\n")
+            f.write('"%s" /SILENT /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /NOCANCEL\r\n' % dest)
+    except Exception as e:
+        print("update bat err:", e)
+
     def _run_and_exit():
-        time.sleep(1.0)
+        time.sleep(0.5)
         try:
-            # Tiha instalacija (Inno): bez wizarda, zatvori i ponovo upali aplikaciju
-            subprocess.Popen(
-                [dest, "/SILENT", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS", "/NOCANCEL"],
-                close_fds=True)
+            flags = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+            subprocess.Popen(["cmd", "/c", bat], close_fds=True, creationflags=flags)
         except Exception as e:
             print("update launch err:", e)
             try:
-                subprocess.Popen([dest], close_fds=True)  # rezerva: pokreni normalno
+                subprocess.Popen([dest, "/SILENT"], close_fds=True)
             except Exception:
                 pass
         os._exit(0)
