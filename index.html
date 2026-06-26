@@ -365,9 +365,10 @@
         <input id="ask_min" type="number" inputmode="numeric" placeholder="minuta (npr. 45)" />
       </div>
       <div class="fld">
-        <label>Cijena € <span style="color:var(--muted)">(prazno = po satnici)</span></label>
+        <label>Cijena € <span style="color:var(--muted)">(sama se računa po satnici — možeš izmijeniti)</span></label>
         <input id="ask_price" type="number" step="0.5" inputmode="decimal" placeholder="auto" />
       </div>
+      <div id="ask_calc" style="text-align:center;font-weight:700;color:var(--accent2);min-height:20px;margin-bottom:6px"></div>
       <div class="modal-actions">
         <button class="btn ghost" id="ask_cancel">Otkaži</button>
         <button class="btn primary" id="ask_ok">Potvrdi</button>
@@ -583,17 +584,33 @@ async function customExtend(id){ const r=await openAsk('Doplata — vrijeme i ci
 
 // ── Lijepi modal za vrijeme/cijenu (umjesto browser prompt) ──
 let _askRes=null;
+function askCalc(){
+  const m=parseFloat($('ask_min').value)||0;
+  const auto = pricePerHour>0 ? (m/60*pricePerHour) : 0;
+  $('ask_price').placeholder = pricePerHour>0 ? auto.toFixed(2) : 'upiši €';
+  const pv=$('ask_price').value;
+  const eff = pv!=='' ? (parseFloat(pv)||0) : auto;
+  $('ask_calc').textContent = m>0
+    ? `${fmtMin(m)} → ${eff.toFixed(2)}€` + (pricePerHour>0?` · ${pricePerHour}€/h`:' · (postavi cijenu/sat u Cjenovniku)')
+    : '';
+}
+function setAskMin(m){ $('ask_min').value=m; if(pricePerHour>0) $('ask_price').value=(m/60*pricePerHour).toFixed(2); askCalc(); $('ask_min').focus(); }
 function openAsk(title,defMin){
   $('ask_title').textContent=title;
   $('ask_min').value=defMin||'';
-  $('ask_price').value='';
-  $('ask_chips').innerHTML=[15,30,45,60,90,120].map(m=>
-    `<button type="button" class="pkg" style="flex:0 0 auto;min-width:58px" onclick="document.getElementById('ask_min').value=${m};document.getElementById('ask_min').focus()"><b>${m}</b><span>min</span></button>`).join('');
+  $('ask_price').value=(defMin&&pricePerHour>0)?(defMin/60*pricePerHour).toFixed(2):'';
+  $('ask_chips').innerHTML=[15,30,45,60,90,120].map(m=>{
+    const pr = pricePerHour>0 ? (m/60*pricePerHour) : 0;
+    return `<button type="button" class="pkg" style="flex:0 0 auto;min-width:64px" onclick="setAskMin(${m})"><b>${m} min</b>${pr?('<span>'+pr.toFixed(2)+'€</span>'):''}</button>`;
+  }).join('');
+  askCalc();
   $('askOv').classList.add('show');
   setTimeout(()=>$('ask_min').focus(),60);
   return new Promise(res=>{ _askRes=res; });
 }
 function _askClose(val){ $('askOv').classList.remove('show'); if(_askRes){const r=_askRes;_askRes=null;r(val);} }
+$('ask_min').addEventListener('input',askCalc);
+$('ask_price').addEventListener('input',askCalc);
 $('ask_ok').onclick=()=>{ const m=parseFloat($('ask_min').value); const pv=$('ask_price').value; _askClose(m>0?{minutes:m,amount:(pv!==''?parseFloat(pv):null)}:null); };
 $('ask_cancel').onclick=()=>_askClose(null);
 $('askOv').onclick=(e)=>{ if(e.target===$('askOv'))_askClose(null); };
@@ -807,6 +824,7 @@ function edit(id){ openModal(stations.find(s=>s.id===id)); }
   refreshPazarBadge();
   loadEnforce();
   checkUpdate();
+  setInterval(checkUpdate, 120000);  // sam provjerava update svake 2 min (bez restarta)
   try{ const v=await (await fetch('/api/version')).json(); const sub=document.querySelector('.sub'); if(sub&&v.version) sub.textContent += ' · v'+v.version; }catch(e){}
 })();
 setInterval(refreshPazarBadge, 8000);
