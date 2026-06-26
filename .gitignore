@@ -1,0 +1,10 @@
+# build artefakti
+build/
+dist/
+installer/
+__pycache__/
+*.pyc
+*.spec.bak
+# lokalni podaci (TV konfiguracija/pazar)
+stations.json
+pc-agent/__pycache__/

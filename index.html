@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="me">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GameZone · Igraonica TV Tajmer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#070810; --bg2:#0b0d18;
+    --panel:rgba(255,255,255,.045); --panel-solid:#11131f;
+    --line:rgba(255,255,255,.09); --line2:rgba(255,255,255,.16);
+    --txt:#eef0f6; --muted:#7e8499; --muted2:#aeb4c6;
+    --accent:#7c5cff; --accent2:#19d3ff;
+    --grad:linear-gradient(135deg,#7c5cff 0%,#19d3ff 100%);
+    --grad-soft:linear-gradient(135deg,rgba(124,92,255,.18),rgba(25,211,255,.14));
+    --gold:#ffcb5b; --emerald:#27e2a4; --danger:#ff5876;
+    --shadow:0 18px 50px -18px rgba(0,0,0,.85);
+  }
+  *{box-sizing:border-box}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:6px;border:2px solid transparent;background-clip:padding-box}
+  ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.22);background-clip:padding-box}
+  html,body{margin:0;padding:0;min-height:100vh;color:var(--txt);
+    font-family:'Manrope',system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;
+    background:var(--bg);
+    background-image:
+      radial-gradient(900px 600px at 12% -8%, rgba(124,92,255,.22), transparent 60%),
+      radial-gradient(800px 600px at 108% 0%, rgba(25,211,255,.16), transparent 55%),
+      linear-gradient(180deg, var(--bg2), var(--bg) 60%);
+    background-attachment:fixed;}
+  body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;
+    background-image:linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px);
+    background-size:48px 48px;mask-image:radial-gradient(circle at 50% 0%,#000,transparent 80%)}
+  .top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+    padding:16px 26px;position:sticky;top:0;z-index:20;
+    background:rgba(8,9,16,.72);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:13px}
+  .logo{width:42px;height:42px;border-radius:12px;background:var(--grad);
+    display:flex;align-items:center;justify-content:center;font-size:21px;
+    box-shadow:0 8px 24px -6px rgba(124,92,255,.6),inset 0 1px 0 rgba(255,255,255,.3)}
+  .brand-name{font-size:19px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+  .brand-name b{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .sub{font-size:11.5px;color:var(--muted);font-weight:500;margin-top:1px}
+  .kpi{display:flex;align-items:center;gap:9px;padding:8px 14px;border-radius:12px;
+    background:linear-gradient(135deg,rgba(255,203,91,.14),rgba(255,203,91,.05));
+    border:1px solid rgba(255,203,91,.28)}
+  .kpi .k-ico{font-size:15px}
+  .kpi .k-lab{font-size:11px;color:var(--muted2);font-weight:600}
+  .kpi .k-val{font-size:16px;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums}
+  .btn{border:1px solid var(--line2);background:rgba(255,255,255,.04);color:var(--txt);
+    border-radius:11px;padding:10px 14px;font-size:13px;font-weight:700;cursor:pointer;
+    font-family:inherit;transition:.15s;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+  .btn:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.28);transform:translateY(-1px)}
+  .btn:active{transform:translateY(0)}
+  .btn.primary{background:var(--grad);color:#0b0d18;border:none;font-weight:800;
+    box-shadow:0 10px 22px -8px rgba(124,92,255,.7)}
+  .btn.primary:hover{filter:brightness(1.07)}
+  .btn.ghost{background:transparent}
+  .btn.sm{padding:8px 11px;font-size:12px;border-radius:9px}
+  .wrap{position:relative;z-index:1;max-width:1480px;margin:0 auto;padding:26px 26px 50px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px}
+  @media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}}
+  .stat{display:flex;align-items:center;gap:15px;padding:18px 20px;border-radius:18px;
+    background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+  .stat .ic{width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;
+    font-size:21px;flex-shrink:0;background:var(--grad-soft);border:1px solid var(--line2)}
+  .stat .v{font-size:26px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .stat .l{font-size:12px;color:var(--muted);font-weight:600;margin-top:4px}
+  .stat.s-active .ic{background:linear-gradient(135deg,rgba(39,226,164,.25),rgba(39,226,164,.08));border-color:rgba(39,226,164,.35)}
+  .stat.s-active .v{color:var(--emerald)}
+  .stat.s-free .ic{background:linear-gradient(135deg,rgba(25,211,255,.22),rgba(25,211,255,.06));border-color:rgba(25,211,255,.32)}
+  .stat.s-money .ic{background:linear-gradient(135deg,rgba(255,203,91,.25),rgba(255,203,91,.07));border-color:rgba(255,203,91,.35)}
+  .stat.s-money .v{color:var(--gold)}
+  .section-h{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:800;letter-spacing:.01em;
+    color:var(--muted2);margin-bottom:16px;text-transform:uppercase}
+  .count-chip{font-size:12px;font-weight:800;color:var(--accent2);background:rgba(25,211,255,.12);
+    border:1px solid rgba(25,211,255,.25);padding:2px 10px;border-radius:20px}
+  .pkg{flex:1;min-width:0;border:1px solid var(--line2);background:rgba(255,255,255,.04);color:var(--txt);
+    border-radius:12px;padding:11px 6px;font-weight:800;cursor:pointer;font-family:inherit;transition:.15s;
+    display:flex;flex-direction:column;gap:3px;align-items:center;line-height:1}
+  .pkg b{font-size:13px}
+  .pkg span{font-size:12px;color:var(--accent2);font-weight:700}
+  .pkg:hover{border-color:var(--accent);background:rgba(124,92,255,.14);transform:translateY(-1px)}
+  .pkg.more{justify-content:center;color:var(--muted)}
+  .grid{position:relative;z-index:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));
+    gap:18px}
+  .card{position:relative;z-index:1;background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:20px;
+    display:flex;flex-direction:column;gap:13px;transition:.2s;overflow:hidden;
+    box-shadow:var(--shadow);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+  .card::after{content:'';position:absolute;inset:0;border-radius:20px;pointer-events:none;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.07)}
+  .card:hover{transform:translateY(-3px);border-color:var(--line2)}
+  .card.active{border-color:rgba(39,226,164,.55);box-shadow:0 0 0 1px rgba(39,226,164,.25),0 20px 50px -18px rgba(39,226,164,.35)}
+  .card.active::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--emerald),transparent)}
+  .card.warn{border-color:rgba(255,203,91,.6)}
+  .card.warn::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--gold),transparent)}
+  .card.danger{border-color:rgba(255,88,118,.7);animation:pulse 1.1s infinite}
+  .card.danger::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--danger)}
+  .card.expired{border-color:rgba(255,88,118,.4);opacity:.92}
+  .timer.red{color:var(--danger)!important;animation:blink 1s infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,88,118,0),0 18px 50px -18px rgba(255,88,118,.4)}50%{box-shadow:0 0 0 4px rgba(255,88,118,.22),0 18px 50px -18px rgba(255,88,118,.5)}}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.5}}
+  .chead{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+  .cname{font-size:17px;font-weight:800;letter-spacing:-.01em}
+  .cmeta{font-size:11.5px;color:var(--muted);margin-top:3px;font-weight:500}
+  .badge{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+    padding:5px 10px;border-radius:30px;border:1px solid var(--line2);color:var(--muted2);white-space:nowrap}
+  .badge.ACTIVE{background:rgba(39,226,164,.16);color:var(--emerald);border-color:rgba(39,226,164,.4)}
+  .badge.EXPIRED{background:rgba(255,88,118,.16);color:var(--danger);border-color:rgba(255,88,118,.4)}
+  .badge.IDLE{background:rgba(255,255,255,.05)}
+  .timer{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:50px;font-weight:700;
+    font-variant-numeric:tabular-nums;letter-spacing:-.02em;text-align:center;padding:4px 0;line-height:1.05}
+  .card.active .timer{background:linear-gradient(180deg,#fff,#bfeede);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .timer.small{font-size:18px;color:var(--muted);font-weight:600;font-family:'Manrope';letter-spacing:0;padding:14px 0}
+  .progress{height:7px;border-radius:6px;background:rgba(255,255,255,.07);overflow:hidden}
+  .progress > i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--emerald),#7cffd6);transition:width 1s linear}
+  .card.warn .progress > i{background:linear-gradient(90deg,var(--gold),#ffe6a8)}
+  .card.danger .progress > i{background:linear-gradient(90deg,var(--danger),#ff9fb1)}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .row .btn{flex:1;min-width:0;white-space:nowrap;justify-content:center}
+  .tvline{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted);
+    border-top:1px solid var(--line);padding-top:12px;margin-top:2px}
+  .dot{width:9px;height:9px;border-radius:50%;background:#3a3f52;flex-shrink:0;box-shadow:0 0 0 3px rgba(255,255,255,.03)}
+  .dot.on{background:var(--emerald);box-shadow:0 0 10px var(--emerald),0 0 0 3px rgba(39,226,164,.18)}
+  .last{font-size:11px;color:var(--muted);min-height:14px;font-weight:500}
+  .empty{grid-column:1/-1;text-align:center;color:var(--muted);padding:80px 20px;
+    border:1.5px dashed var(--line2);border-radius:22px;background:rgba(255,255,255,.015)}
+  .empty .big{font-size:40px;margin-bottom:10px;opacity:.7}
+  /* modal */
+  .ov{position:fixed;inset:0;background:rgba(4,5,12,.7);backdrop-filter:blur(6px);display:none;align-items:center;
+    justify-content:center;z-index:60;padding:20px}
+  .ov.show{display:flex;animation:fade .18s ease}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .modal{background:linear-gradient(180deg,#141728,#0e1020);border:1px solid var(--line2);border-radius:20px;padding:24px;
+    width:100%;max-width:460px;max-height:90vh;overflow:auto;box-shadow:var(--shadow)}
+  .modal h3{margin:0 0 16px;font-size:19px;font-weight:800;letter-spacing:-.01em}
+  .fld{margin-bottom:13px}
+  .fld label{display:block;font-size:12px;color:var(--muted2);margin-bottom:6px;font-weight:600}
+  .fld input,.fld select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line2);
+    background:rgba(0,0,0,.35);color:#fff;font-family:inherit;font-size:14px;transition:.15s}
+  .fld input:focus,.fld select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(124,92,255,.22)}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.55}
+  .only-sony,.only-http,.only-pc{display:none}
+  .modal-actions{display:flex;gap:9px;margin-top:10px}
+  .modal-actions .btn{flex:1;justify-content:center;padding:12px}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(10px);
+    background:linear-gradient(135deg,#1a1d2e,#12141f);border:1px solid var(--line2);color:#fff;
+    padding:13px 20px;border-radius:13px;font-weight:700;font-size:13px;z-index:100;display:none;
+    box-shadow:var(--shadow)}
+  .toast.show{display:block;animation:toastIn .25s ease}
+  @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+  .stat-card{flex:1;background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.02));
+    border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center}
+
+  /* ── MOBILNI ── */
+  @media(max-width:640px){
+    .top{padding:12px 14px;gap:12px;align-items:center}
+    .logo{width:38px;height:38px;font-size:18px;border-radius:11px}
+    .brand-name{font-size:17px}
+    .sub{display:none}
+    #pazarBadge{display:none}              /* duplira se sa karticom u statistici */
+    .actions{width:100%;gap:8px}
+    .actions .btn{flex:1 1 calc(50% - 4px);justify-content:center;padding:12px 8px;font-size:13px}
+    .wrap{padding:16px 14px 44px}
+    .stats{grid-template-columns:repeat(2,1fr);gap:11px;margin-bottom:22px}
+    .stat{padding:14px;gap:12px}
+    .stat .ic{width:42px;height:42px;font-size:19px}
+    .stat .v{font-size:23px}
+    .stat .l{font-size:11.5px}
+    .section-h{margin-bottom:14px;font-size:14px}
+    .grid{grid-template-columns:1fr;gap:14px}
+    .card{padding:17px;border-radius:18px}
+    .timer{font-size:46px}
+    .pkg{padding:12px 6px}
+    .modal{padding:20px;border-radius:18px}
+    .kpi{padding:7px 12px}
+  }
+  @media(max-width:380px){
+    .actions .btn{flex:1 1 100%}
+    .timer{font-size:42px}
+  }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="brand"><span class="logo">🎮</span>
+      <div>
+        <div class="brand-name">Game<b>Zone</b></div>
+        <div class="sub">Kontrola igraonice · mrežno gašenje TV-a · naplata</div>
+      </div>
+    </div>
+    <div class="actions" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="kpi" id="pazarBadge">
+        <span class="k-ico">💰</span>
+        <div><div class="k-lab">Pazar danas</div><div class="k-val" id="pazarToday">0.00€</div></div>
+      </div>
+      <button class="btn" id="pazarBtn">📊 Pazar</button>
+      <button class="btn" id="cjenovnikBtn" title="Uredi cijene i pakete">💶 Cjenovnik</button>
+      <button class="btn" id="enforceBtn" title="Drži TV ugašen dok nije plaćeno (anti-daljinac)">🛡️ Anti-daljinac: …</button>
+      <button class="btn" id="soundBtn" title="Zvuk uključen/isključen">🔔</button>
+      <button class="btn" id="scanBtn">🔍 Skeniraj</button>
+      <button class="btn primary" id="addBtn">＋ Dodaj stanicu</button>
+      <button class="btn" id="quitBtn" title="Izađi iz programa" style="border-color:rgba(255,88,118,.4);color:#ff9aaa">⏻</button>
+    </div>
+  </div>
+
+  <div id="updateBar" style="display:none;align-items:center;gap:12px;padding:11px 26px;
+    background:linear-gradient(90deg,rgba(124,92,255,.22),rgba(25,211,255,.16));
+    border-bottom:1px solid var(--line2)">
+    <span style="font-size:18px">⬆️</span>
+    <div style="flex:1">
+      <b id="updateText">Nova verzija dostupna</b>
+      <div class="hint" style="margin:0" id="updateNotes"></div>
+    </div>
+    <button class="btn primary" id="updateBtn">Ažuriraj sad</button>
+    <button class="btn ghost" id="updateClose" style="padding:8px 10px">✕</button>
+  </div>
+
+  <div class="wrap">
+    <div class="stats" id="stats"></div>
+    <div class="section-h"><span>Stanice</span><span class="count-chip" id="stCount">0</span></div>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <!-- Modal -->
+  <div class="ov" id="ov">
+    <div class="modal">
+      <h3 id="modalTitle">Nova stanica</h3>
+      <input type="hidden" id="f_id" />
+      <div class="fld"><label>Naziv (npr. PS5 #1)</label><input id="f_name" placeholder="PlayStation 1" /></div>
+      <div class="fld"><label>Tip kontrole</label>
+        <select id="f_control">
+          <option value="sony">Sony Bravia TV (mrežno, PSK)</option>
+          <option value="samsung">Samsung TV (Tizen, mrežno)</option>
+          <option value="lg">LG TV (webOS, mrežno)</option>
+          <option value="roku">Hisense/TCL TV (Roku)</option>
+          <option value="pc">💻 Računar / PC (agent zaključava)</option>
+          <option value="http">Univerzalni HTTP (utičnica/custom)</option>
+          <option value="wol">Samo paljenje (WoL)</option>
+        </select>
+      </div>
+      <div class="only-ip">
+        <div class="fld"><label>IP adresa TV-a</label><input id="f_ip" placeholder="192.168.1.50" /></div>
+      </div>
+      <div class="only-sony">
+        <div class="fld"><label>PSK (Pre-Shared Key sa TV-a)</label><input id="f_psk" placeholder="0000" />
+          <div class="hint">Na TV-u: Postavke → Mreža → IP kontrola → Autentifikacija → "Normal i PSK", unesi ključ.</div>
+        </div>
+      </div>
+      <div class="only-pair">
+        <div class="hint" style="background:rgba(255,255,255,.04);border:1px solid var(--line2);border-radius:10px;padding:11px">
+          ℹ️ Prvi put kad klikneš <b>Gasi</b>, na TV-u će iskočiti pitanje „Dozvoli povezivanje?" — prihvati daljinskim <b>jednom</b>. Poslije radi samo.
+        </div>
+      </div>
+      <div class="only-pc">
+        <div class="hint" style="background:rgba(124,92,255,.1);border:1px solid rgba(124,92,255,.3);border-radius:10px;padding:12px;line-height:1.6">
+          💻 <b>Računar (PC):</b> ne gasi se preko mreže. Na taj gaming PC pokreni <b>agent</b> (folder <b>pc-agent</b> → <b>start-agent.bat</b>), izaberi ovu stanicu, i agent će <b>zaključati ekran</b> kad istekne vrijeme, a otključati kad startuješ/doplatiš odavde.
+        </div>
+      </div>
+      <div class="only-http">
+        <div class="fld"><label>URL za PALJENJE</label><input id="f_on_url" placeholder="http://192.168.1.60/relay/0?turn=on" /></div>
+        <div class="fld"><label>URL za GAŠENJE</label><input id="f_off_url" placeholder="http://192.168.1.60/relay/0?turn=off" />
+          <div class="hint">Radi sa Shelly/Tasmota utičnicom ili bilo čim što gasi preko HTTP-a.</div>
+        </div>
+      </div>
+      <div class="fld"><label>MAC adresa TV-a (za paljenje preko mreže — opciono)</label>
+        <input id="f_mac" placeholder="AA:BB:CC:DD:EE:FF" />
+        <div class="hint">Uključi "Remote Start" na TV-u da paljenje radi.</div>
+      </div>
+      <div class="fld"><label>Cijena po satu (€ — opciono)</label><input id="f_price" type="number" step="0.5" placeholder="3" /></div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="delBtn" style="display:none">Obriši</button>
+        <button class="btn ghost" id="cancelBtn">Otkaži</button>
+        <button class="btn primary" id="saveBtn">Sačuvaj</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Discovery modal -->
+  <div class="ov" id="scanOv">
+    <div class="modal">
+      <h3>🔍 Uređaji na mreži</h3>
+      <div id="scanStatus" class="hint" style="margin-bottom:10px"></div>
+      <div id="scanList"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="scanRefresh">↻ Skeniraj ponovo</button>
+        <button class="btn primary" id="scanClose">Zatvori</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pazar modal -->
+  <div class="ov" id="pazarOv">
+    <div class="modal" style="max-width:560px">
+      <h3>💰 Pazar i istorija</h3>
+      <div style="display:flex;gap:12px;margin-bottom:16px">
+        <div class="stat-card" style="background:linear-gradient(160deg,rgba(255,203,91,.16),rgba(255,203,91,.04));border-color:rgba(255,203,91,.3)">
+          <div class="hint" style="margin:0">Ukupno danas</div>
+          <div id="pz_total" style="font-size:32px;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums">0.00€</div>
+        </div>
+        <div class="stat-card">
+          <div class="hint" style="margin:0">Broj naplata</div>
+          <div id="pz_count" style="font-size:32px;font-weight:800;color:var(--accent2);font-variant-numeric:tabular-nums">0</div>
+        </div>
+      </div>
+
+      <div style="background:#0c0c0c;border:1px solid #2a2a2a;border-radius:10px;padding:12px;margin-bottom:14px">
+        <div style="font-weight:700;font-size:13px;margin-bottom:8px">🧮 Kusur</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="k_price" type="number" step="0.5" placeholder="Cijena €" style="flex:1;padding:9px;border-radius:8px;border:1px solid #444;background:#111;color:#fff" oninput="calcKusur()" />
+          <input id="k_paid" type="number" step="0.5" placeholder="Dao €" style="flex:1;padding:9px;border-radius:8px;border:1px solid #444;background:#111;color:#fff" oninput="calcKusur()" />
+          <div style="flex:1;text-align:center">Kusur: <b id="k_out" style="font-size:18px">0.00€</b></div>
+        </div>
+      </div>
+
+      <div style="font-weight:700;font-size:13px;margin-bottom:6px">📺 Po stanicama (danas) — koliko je radio i zaradio</div>
+      <div id="pz_byStation" style="margin-bottom:14px;border:1px solid #2a2a2a;border-radius:10px;overflow:hidden"></div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-weight:700;font-size:13px">Istorija (danas)</div>
+        <div style="display:flex;gap:6px">
+          <a class="btn sm" id="pz_export" href="/api/history.csv" download>⬇ CSV</a>
+          <button class="btn sm" id="pz_pkgBtn">💶 Cjenovnik</button>
+          <button class="btn sm" id="pz_closeDay" style="border-color:rgba(255,88,118,.45);color:#ff9aaa">🌙 Zatvori dan</button>
+        </div>
+      </div>
+      <div id="pz_history" style="max-height:240px;overflow:auto;border:1px solid #2a2a2a;border-radius:10px"></div>
+
+      <div class="modal-actions"><button class="btn primary" id="pz_close">Zatvori</button></div>
+    </div>
+  </div>
+
+  <!-- Cjenovnik editor -->
+  <div class="ov" id="pkgOv">
+    <div class="modal">
+      <h3>💶 Cjenovnik</h3>
+      <div class="hint" style="margin-bottom:8px">Cijena po satu se koristi za <b>Slobodno</b>. Paketi su prečice kad startuješ stanicu.</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px;border:1px solid var(--line2);border-radius:9px;background:rgba(255,255,255,.03)">
+        <div style="flex:1"><b>⏱ Cijena po satu (Slobodno)</b><div class="hint" style="margin:0">Globalno za sve stanice</div></div>
+        <input type="number" step="0.5" id="pkgPph" placeholder="€/h" style="width:84px;padding:9px;border-radius:7px;border:1px solid #444;background:#111;color:#fff;font-weight:700"/>
+        <span style="color:var(--muted)">€/h</span>
+      </div>
+      <div class="hint" style="margin-bottom:6px"><b>Paketi</b> (naziv · minuti · cijena):</div>
+      <div id="pkgList"></div>
+      <button class="btn sm" id="pkgAdd" style="width:100%;margin-top:6px">+ Dodaj paket</button>
+      <div class="modal-actions">
+        <button class="btn ghost" id="pkgCancel">Otkaži</button>
+        <button class="btn primary" id="pkgSave">Sačuvaj</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom vrijeme/cijena modal -->
+  <div class="ov" id="askOv">
+    <div class="modal" style="max-width:400px">
+      <h3 id="ask_title">Vrijeme i cijena</h3>
+      <div class="fld">
+        <label>Vrijeme</label>
+        <div id="ask_chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
+        <input id="ask_min" type="number" inputmode="numeric" placeholder="minuta (npr. 45)" />
+      </div>
+      <div class="fld">
+        <label>Cijena € <span style="color:var(--muted)">(prazno = po satnici)</span></label>
+        <input id="ask_price" type="number" step="0.5" inputmode="decimal" placeholder="auto" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="ask_cancel">Otkaži</button>
+        <button class="btn primary" id="ask_ok">Potvrdi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Naplata + kusur modal -->
+  <div class="ov" id="payOv">
+    <div class="modal" style="max-width:390px">
+      <h3 id="pay_title">Naplata</h3>
+      <div style="text-align:center;margin:6px 0 16px">
+        <div class="hint" style="margin:0">Za naplatu</div>
+        <div id="pay_price" style="font-size:38px;font-weight:800;color:var(--gold);line-height:1.1">0.00€</div>
+        <div id="pay_dur" class="hint" style="margin-top:2px"></div>
+      </div>
+      <div class="fld">
+        <label>Gost dao (€) — za kusur (opciono)</label>
+        <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px" id="pay_quick"></div>
+        <input id="pay_given" type="number" step="0.5" inputmode="decimal" placeholder="npr. 10" />
+      </div>
+      <div style="text-align:center;font-size:15px;margin-bottom:8px;padding:10px;background:rgba(25,211,255,.08);border:1px solid rgba(25,211,255,.2);border-radius:12px">
+        Kusur: <b id="pay_change" style="font-size:24px;color:var(--accent2)">0.00€</b>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="pay_cancel">Otkaži</button>
+        <button class="btn primary" id="pay_ok">▶ Pokreni</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom potvrda modal -->
+  <div class="ov" id="confOv">
+    <div class="modal" style="max-width:360px">
+      <h3 id="conf_title">Potvrda</h3>
+      <div id="conf_msg" style="font-size:14.5px;color:var(--muted2);margin-bottom:8px;line-height:1.5"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="conf_no">Ne</button>
+        <button class="btn primary" id="conf_yes" style="background:linear-gradient(135deg,#ff5876,#ff9a6b)">Da, ugasi</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+const $ = (id)=>document.getElementById(id);
+let stations = [];
+let packages = [];
+let pricePerHour = 0;   // globalna cijena/sat (Slobodno)
+let soundOn = true;
+let prevStatus = {};   // id -> zadnji status (za detekciju isteka)
+let prevRem = {};      // id -> zadnje preostalo vrijeme (za upozorenja 5/1 min)
+
+async function loadPackages(){
+  try{ const r=await fetch('/api/packages'); const j=await r.json(); packages=j.packages||[]; pricePerHour=j.price_per_hour||0; }catch(e){}
+}
+
+function fmt(sec){
+  sec = Math.max(0, sec|0);
+  const m = Math.floor(sec/60), s = sec%60;
+  const h = Math.floor(m/60), mm = m%60;
+  if(h>0) return `${h}:${String(mm).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${String(mm).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2200);}
+
+async function api(url, method='POST', body){
+  const r = await fetch(url,{method,headers:{'Content-Type':'application/json'},
+    body: body?JSON.stringify(body):undefined});
+  return r.json();
+}
+
+async function load(){
+  try{
+    const r = await fetch('/api/stations');
+    const d = await r.json();
+    stations = d.stations||[];
+    // detekcija isteka + upozorenja (5 min / 1 min)
+    let expired=false;
+    stations.forEach(s=>{
+      if(prevStatus[s.id]==='ACTIVE' && s.status==='EXPIRED') expired=true;
+      const pr=prevRem[s.id];
+      if(s.status==='ACTIVE' && pr!=null){
+        if(pr>300 && s.remaining<=300 && s.remaining>60){ beep(2); toast(`⏰ ${s.name}: fali 5 min`); }
+        else if(pr>60 && s.remaining<=60){ beep(3); toast(`⚠️ ${s.name}: fali 1 min!`); }
+      }
+      prevRem[s.id]=(s.status==='ACTIVE')?s.remaining:null;
+      prevStatus[s.id]=s.status;
+    });
+    if(expired) beep(5);
+    render();
+  }catch(e){}
+}
+
+function renderStats(){
+  const total=stations.length;
+  const active=stations.filter(s=>s.status==='ACTIVE').length;
+  const free=stations.filter(s=>s.status==='IDLE').length;
+  const pazar=($('pazarToday')&&$('pazarToday').textContent)||'0.00€';
+  const st=$('stats'); if(!st)return;
+  st.innerHTML=`
+    <div class="stat"><div class="ic">🖥️</div><div><div class="v">${total}</div><div class="l">Ukupno stanica</div></div></div>
+    <div class="stat s-active"><div class="ic">🎮</div><div><div class="v">${active}</div><div class="l">Aktivne (igra)</div></div></div>
+    <div class="stat s-free"><div class="ic">🟢</div><div><div class="v">${free}</div><div class="l">Slobodne</div></div></div>
+    <div class="stat s-money"><div class="ic">💰</div><div><div class="v">${pazar}</div><div class="l">Pazar danas</div></div></div>`;
+  if($('stCount'))$('stCount').textContent=total;
+}
+function render(){
+  renderStats();
+  const g = $('grid');
+  if(!stations.length){
+    g.innerHTML = `<div class="empty"><div class="big">🕹️</div>
+      <div style="font-size:18px;font-weight:800;color:#eef0f6;margin-bottom:6px">Nema stanica još</div>
+      <div style="margin-bottom:18px">Klikni <b>🔍 Skeniraj</b> da nađeš TV-ove na mreži, ili <b>＋ Dodaj stanicu</b> ručno.</div>
+      <button class="btn primary" onclick="document.getElementById('scanBtn').click()" style="display:inline-flex">🔍 Skeniraj mrežu</button></div>`;
+    return;
+  }
+  g.innerHTML = stations.map(s=>{
+    const danger = s.status==='ACTIVE' && s.remaining>0 && s.remaining<=60;
+    const warn = s.status==='ACTIVE' && s.remaining>0 && s.remaining<=300;
+    const cls = s.status==='ACTIVE' ? (danger?'danger':(warn?'warn':'active')) : (s.status==='EXPIRED'?'expired':'');
+    const totalSec = (s.session_minutes||0)*60;
+    const pct = (s.status==='ACTIVE' && totalSec>0) ? Math.max(0,Math.min(100, s.remaining/totalSec*100)) : 0;
+    const timer = (s.status==='ACTIVE' && s.open)
+      ? `<div class="timer" data-id="${s.id}" data-open="1" data-elapsed="${s.elapsed}" data-pph="${s.pph_eff||0}">${fmt(s.elapsed)}</div>
+         <div class="cmeta" style="text-align:center;color:#fff">⏱ Slobodno · <b data-amt="${s.id}">${(s.live_amount||0).toFixed(2)}€</b>${s.pph_eff?(' <span style="opacity:.6">('+s.pph_eff+'€/h)</span>'):''}</div>`
+      : (s.status==='ACTIVE'
+        ? `<div class="timer ${danger?'red':''}" data-id="${s.id}" data-rem="${s.remaining}" data-total="${totalSec}">${fmt(s.remaining)}</div>
+           <div class="progress"><i data-bar="${s.id}" style="width:${pct}%"></i></div>`
+        : (s.status==='EXPIRED'
+            ? `<div class="timer small">⛔ Vrijeme isteklo</div>`
+            : `<div class="timer small">○ slobodna</div>`));
+    const pkgBtns = packages.map(p=>
+      `<button class="pkg" onclick="openPay('${s.id}',${p.minutes},${p.price},'${esc(s.name).replace(/'/g,'')}' )"><b>${esc(p.name)}</b>${p.price?('<span>'+p.price+'€</span>'):''}</button>`).join('');
+    const controls = (s.status==='ACTIVE' && s.open)
+      ? `<div class="row">
+           <button class="btn sm primary" style="flex:2" onclick="stop('${s.id}')">⏹ Završi i naplati</button>
+         </div>`
+      : (s.status==='ACTIVE' || s.status==='EXPIRED'
+      ? `<div class="hint" style="margin:2px 0 4px">Doplata (dodaje cijenu u pazar):</div>
+         <div class="row" style="flex-wrap:wrap">${packages.map(p=>
+           `<button class="pkg" onclick="openPay('${s.id}',${p.minutes},${p.price},'${esc(s.name).replace(/'/g,'')}','extend')"><b>${esc(p.name)}</b>${p.price?('<span>'+p.price+'€</span>'):''}</button>`).join('')}
+           <button class="pkg more" onclick="customExtend('${s.id}')"><b>＋</b><span>ostalo</span></button>
+         </div>
+         <div class="row">
+           <button class="btn sm primary" style="flex:2" onclick="stop('${s.id}')">⏹ Stop (gasi TV)</button>
+         </div>`
+      : `<div class="row" style="flex-wrap:wrap">${pkgBtns}
+           <button class="pkg more" onclick="customStart('${s.id}')"><b>＋</b><span>ostalo</span></button>
+         </div>
+         <div class="row">
+           <button class="btn sm" style="flex:2" onclick="openSlobodno('${s.id}')">▶ Slobodno (na neodređeno)</button>
+         </div>`);
+    const paidLine = (s.status==='ACTIVE'||s.status==='EXPIRED') && !s.open && s.paid
+      ? `<div class="cmeta" style="text-align:center;color:#fff">Plaćeno: <b>${(s.paid).toFixed(2)}€</b> · ${s.session_minutes} min</div>` : '';
+    return `<div class="card ${cls}">
+      <div class="chead">
+        <div><div class="cname">${esc(s.name)}</div>
+          <div class="cmeta">${ctrlLabel(s)} ${s.pph_eff?('· '+s.pph_eff+'€/h'):''}</div></div>
+        <span class="badge ${s.status}">${badge(s.status)}</span>
+      </div>
+      ${timer}
+      ${paidLine}
+      ${controls}
+      <div class="last">${esc(s.last_action||'')}</div>
+      <div class="tvline">
+        <span class="dot ${s.tv_on?'on':''}"></span> TV ${s.tv_on?'upaljen':'ugašen'}
+        <span style="flex:1"></span>
+        <button class="btn sm ghost" onclick="tv('${s.id}','on')">Pali</button>
+        <button class="btn sm ghost" onclick="tv('${s.id}','off')">Gasi</button>
+        <button class="btn sm ghost" onclick="tv('${s.id}','test')">Test</button>
+        <button class="btn sm ghost" onclick="edit('${s.id}')">⚙</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function esc(s){return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function badge(st){return st==='ACTIVE'?'Igra':st==='EXPIRED'?'Isteklo':'Slobodna';}
+function ctrlLabel(s){return {sony:'Sony '+(s.ip||''),samsung:'Samsung '+(s.ip||''),lg:'LG '+(s.ip||''),roku:'Roku '+(s.ip||''),pc:'💻 Računar (PC)',http:'HTTP utičnica',wol:'WoL'}[s.control]||s.control;}
+
+// lokalno odbrojavanje (glatko, bez čekanja servera)
+setInterval(()=>{
+  document.querySelectorAll('.timer[data-rem]').forEach(el=>{
+    let rem = parseInt(el.dataset.rem)-1;
+    if(rem<0)rem=0;
+    el.dataset.rem=rem; el.textContent=fmt(rem);
+    if(rem<=60) el.classList.add('red');
+    const total=parseInt(el.dataset.total)||0;
+    const id=el.dataset.id;
+    const bar=document.querySelector(`i[data-bar="${id}"]`);
+    if(bar&&total>0) bar.style.width=Math.max(0,Math.min(100,rem/total*100))+'%';
+  });
+  // Slobodno — kuca prema gore + uživo iznos
+  document.querySelectorAll('.timer[data-open]').forEach(el=>{
+    let el2 = parseInt(el.dataset.elapsed)+1;
+    el.dataset.elapsed=el2; el.textContent=fmt(el2);
+    const pph=parseFloat(el.dataset.pph)||0;
+    const amt=document.querySelector(`b[data-amt="${el.dataset.id}"]`);
+    if(amt) amt.textContent=(el2/3600*pph).toFixed(2)+'€';
+  });
+},1000);
+setInterval(load, 3000); // sync sa serverom
+
+async function start(id,min,amount){ await api(`/api/stations/${id}/start`,'POST',{minutes:min,amount:(amount!=null?amount:undefined)}); toast(`Start ${min} min${amount?(' · '+amount+'€'):''}`); load(); refreshPazarBadge(); }
+async function extend(id,min,amount){ await api(`/api/stations/${id}/extend`,'POST',{minutes:min,amount:(amount!=null?amount:undefined)}); toast(`Doplata +${min} min`); load(); refreshPazarBadge(); }
+async function openSlobodno(id){ if(!await askConfirm('Slobodno (na neodređeno)?','Sat počinje da kuca. Naplata se računa po cijeni/sat kad klikneš „Završi i naplati".'))return; await api(`/api/stations/${id}/open`,'POST',{}); toast('Slobodno — počelo'); load(); refreshPazarBadge(); }
+async function stop(id){ if(!await askConfirm('Zaustaviti i ugasiti TV?','Stanica će se osloboditi, TV se gasi.'))return; const r=await api(`/api/stations/${id}/stop`,'POST',{}); if(r&&r.charged_min){ toast(`Naplaćeno: ${r.charged.toFixed(2)}€ · ${r.charged_min} min`); } else { toast('Stop — TV ugašen'); } load(); refreshPazarBadge(); }
+async function tv(id,action){ const r=await api(`/api/stations/${id}/tv`,'POST',{action}); toast(r.msg||'OK'); load(); }
+async function customStart(id){ const r=await openAsk('Vrijeme i cijena',45); if(r) start(id,r.minutes,r.amount); }
+async function customExtend(id){ const r=await openAsk('Doplata — vrijeme i cijena',15); if(r) extend(id,r.minutes,r.amount); }
+
+// ── Lijepi modal za vrijeme/cijenu (umjesto browser prompt) ──
+let _askRes=null;
+function openAsk(title,defMin){
+  $('ask_title').textContent=title;
+  $('ask_min').value=defMin||'';
+  $('ask_price').value='';
+  $('ask_chips').innerHTML=[15,30,45,60,90,120].map(m=>
+    `<button type="button" class="pkg" style="flex:0 0 auto;min-width:58px" onclick="document.getElementById('ask_min').value=${m};document.getElementById('ask_min').focus()"><b>${m}</b><span>min</span></button>`).join('');
+  $('askOv').classList.add('show');
+  setTimeout(()=>$('ask_min').focus(),60);
+  return new Promise(res=>{ _askRes=res; });
+}
+function _askClose(val){ $('askOv').classList.remove('show'); if(_askRes){const r=_askRes;_askRes=null;r(val);} }
+$('ask_ok').onclick=()=>{ const m=parseFloat($('ask_min').value); const pv=$('ask_price').value; _askClose(m>0?{minutes:m,amount:(pv!==''?parseFloat(pv):null)}:null); };
+$('ask_cancel').onclick=()=>_askClose(null);
+$('askOv').onclick=(e)=>{ if(e.target===$('askOv'))_askClose(null); };
+$('ask_min').addEventListener('keydown',e=>{ if(e.key==='Enter')$('ask_ok').click(); });
+$('ask_price').addEventListener('keydown',e=>{ if(e.key==='Enter')$('ask_ok').click(); });
+
+// ── Lijepa potvrda (umjesto browser confirm) ──
+let _confRes=null;
+function askConfirm(title,msg){
+  $('conf_title').textContent=title; $('conf_msg').textContent=msg||'';
+  $('confOv').classList.add('show');
+  return new Promise(res=>{ _confRes=res; });
+}
+function _confClose(v){ $('confOv').classList.remove('show'); if(_confRes){const r=_confRes;_confRes=null;r(v);} }
+$('conf_yes').onclick=()=>_confClose(true);
+$('conf_no').onclick=()=>_confClose(false);
+$('confOv').onclick=(e)=>{ if(e.target===$('confOv'))_confClose(false); };
+
+// ── Naplata + kusur (na startu paketa) ──
+let _payCtx=null;
+function openPay(id,minutes,price,name,mode){
+  _payCtx={id,minutes,price:price||0,mode:mode||'start'};
+  $('pay_title').textContent=(mode==='extend'?'Doplata · ':'Naplata · ')+(name||'');
+  $('pay_price').textContent=(price||0).toFixed(2)+'€';
+  $('pay_dur').textContent=minutes+' min';
+  $('pay_given').value=''; $('pay_change').textContent='0.00€';
+  $('pay_quick').innerHTML=[5,10,20,50].map(v=>
+    `<button type="button" class="pkg" style="flex:0 0 auto;min-width:48px;padding:8px 10px" onclick="document.getElementById('pay_given').value=${v};payCalc()"><b>${v}€</b></button>`).join('');
+  $('payOv').classList.add('show');
+  setTimeout(()=>$('pay_given').focus(),60);
+}
+function payCalc(){ const p=_payCtx?_payCtx.price:0; const g=parseFloat($('pay_given').value)||0; $('pay_change').textContent=(Math.max(0,g-p)).toFixed(2)+'€'; }
+$('pay_given').addEventListener('input',payCalc);
+$('pay_given').addEventListener('keydown',e=>{ if(e.key==='Enter')$('pay_ok').click(); });
+$('pay_ok').onclick=()=>{ const c=_payCtx; $('payOv').classList.remove('show'); if(c){ if(c.mode==='extend') extend(c.id,c.minutes,c.price); else start(c.id,c.minutes,c.price); } };
+$('pay_cancel').onclick=()=>$('payOv').classList.remove('show');
+$('payOv').onclick=(e)=>{ if(e.target===$('payOv'))$('payOv').classList.remove('show'); };
+
+// ── Zatvori dan: ugasi sve + prikaži pazar ──
+$('pz_closeDay').onclick=async()=>{
+  const act=stations.filter(s=>s.status==='ACTIVE'||s.status==='EXPIRED');
+  if(!await askConfirm('Zatvoriti dan?', `Gase se svi TV-ovi (${act.length} u radu) i ostaje samo pregled pazara.`))return;
+  for(const s of act){ try{ await api(`/api/stations/${s.id}/stop`,'POST',{}); }catch(e){} }
+  await load();
+  await openPazar();
+  toast(`🌙 Dan zatvoren · Pazar ${$('pz_total').textContent}`);
+};
+
+// ── Zvuk (Web Audio bip) ──
+let audioCtx=null;
+function beep(times){
+  if(!soundOn)return;
+  try{
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    let t=audioCtx.currentTime;
+    for(let i=0;i<(times||3);i++){
+      const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+      o.type='square'; o.frequency.value=880;
+      o.connect(g); g.connect(audioCtx.destination);
+      g.gain.setValueAtTime(0.18,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18);
+      o.start(t); o.stop(t+0.18); t+=0.28;
+    }
+  }catch(e){}
+}
+$('soundBtn').onclick=()=>{ soundOn=!soundOn; $('soundBtn').textContent=soundOn?'🔔':'🔕'; if(soundOn)beep(1); toast(soundOn?'Zvuk uključen':'Zvuk isključen'); };
+
+// ── Anti-daljinac (čuvar) ──
+let enforceOn=true;
+function paintEnforce(){
+  const b=$('enforceBtn');
+  b.textContent='🛡️ Anti-daljinac: '+(enforceOn?'UKLJUČEN':'isključen');
+  b.style.borderColor=enforceOn?'rgba(39,226,164,.5)':'var(--line2)';
+  b.style.color=enforceOn?'var(--emerald)':'var(--muted2)';
+}
+async function loadEnforce(){ try{ const d=await (await fetch('/api/enforce')).json(); enforceOn=!!d.on; paintEnforce(); }catch(e){} }
+$('enforceBtn').onclick=async()=>{
+  const next=!enforceOn;
+  if(!next && !await askConfirm('Isključiti zaštitu?','Bez ovoga se TV može upaliti daljinacem i igrati bez plaćanja. Uključi kad zatvaraš igraonicu/testiraš.'))return;
+  try{ const d=await api('/api/enforce','POST',{on:next}); enforceOn=!!d.on; paintEnforce(); toast(enforceOn?'Zaštita uključena — TV se drži ugašen dok nije plaćeno':'Zaštita isključena'); }catch(e){}
+};
+
+// ── Pazar ──
+async function refreshPazarBadge(){
+  try{ const r=await fetch('/api/summary'); const d=await r.json(); $('pazarToday').textContent=(d.total||0).toFixed(2)+'€'; renderStats(); }catch(e){}
+}
+function fmtMin(min){ min=Math.max(0,min|0); const h=Math.floor(min/60), m=min%60; return h>0?`${h}h ${m}min`:`${m}min`; }
+async function openPazar(){
+  $('pazarOv').classList.add('show');
+  try{
+    const rr=await fetch('/api/report'); const rep=await rr.json();
+    const sts=rep.stations||[];
+    $('pz_byStation').innerHTML = sts.length ? (sts.map(s=>
+      `<div style="display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid #1c1c1c;font-size:13px;align-items:center">
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">${esc(s.station)}</span>
+        <span style="color:var(--muted)">${fmtMin(s.minutes)}</span>
+        <span style="width:70px;text-align:right;font-weight:800;color:var(--gold)">${(s.amount||0).toFixed(2)}€</span>
+      </div>`).join('') +
+      `<div style="display:flex;gap:10px;padding:9px 12px;font-size:13px;align-items:center;background:rgba(255,203,91,.06)">
+        <span style="flex:1;font-weight:800">UKUPNO</span>
+        <span style="color:var(--muted)">${fmtMin(rep.total_minutes||0)}</span>
+        <span style="width:70px;text-align:right;font-weight:800;color:var(--gold)">${(rep.total||0).toFixed(2)}€</span>
+      </div>`) : '<div class="hint" style="padding:16px;text-align:center">Nijedan TV nije radio danas.</div>';
+  }catch(e){}
+  try{
+    const r=await fetch('/api/history'); const d=await r.json();
+    $('pz_total').textContent=(d.summary.total||0).toFixed(2)+'€';
+    $('pz_count').textContent=d.summary.count||0;
+    const rows=d.history||[];
+    $('pz_history').innerHTML = rows.length? rows.map(h=>
+      `<div style="display:flex;gap:10px;padding:8px 12px;border-bottom:1px solid #1c1c1c;font-size:13px">
+        <span style="color:var(--muted);width:46px">${h.time}</span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(h.station)}</span>
+        <span style="color:var(--muted)">${h.minutes}min</span>
+        <span style="width:60px;text-align:right;font-weight:700">${(h.amount||0).toFixed(2)}€</span>
+        <span style="color:var(--muted);font-size:11px;width:48px">${h.kind==='extend'?'doplata':'start'}</span>
+      </div>`).join('') : '<div class="hint" style="padding:16px;text-align:center">Nema naplata danas.</div>';
+  }catch(e){}
+}
+function calcKusur(){
+  const p=parseFloat($('k_price').value)||0, d=parseFloat($('k_paid').value)||0;
+  $('k_out').textContent=(Math.max(0,d-p)).toFixed(2)+'€';
+}
+$('pazarBtn').onclick=openPazar;
+$('pz_close').onclick=()=>$('pazarOv').classList.remove('show');
+$('pazarOv').onclick=(e)=>{if(e.target===$('pazarOv'))$('pazarOv').classList.remove('show');};
+
+// ── Paketi editor ──
+function renderPkgEditor(){
+  $('pkgList').innerHTML = packages.map((p,i)=>
+    `<div style="display:flex;gap:6px;margin-bottom:6px">
+      <input value="${esc(p.name)}" oninput="packages[${i}].name=this.value" placeholder="Naziv" style="flex:1;padding:8px;border-radius:7px;border:1px solid #444;background:#111;color:#fff"/>
+      <input type="number" value="${p.minutes}" oninput="packages[${i}].minutes=parseInt(this.value)||0" placeholder="min" style="width:64px;padding:8px;border-radius:7px;border:1px solid #444;background:#111;color:#fff"/>
+      <input type="number" step="0.5" value="${p.price}" oninput="packages[${i}].price=parseFloat(this.value)||0" placeholder="€" style="width:64px;padding:8px;border-radius:7px;border:1px solid #444;background:#111;color:#fff"/>
+      <button class="btn sm" onclick="packages.splice(${i},1);renderPkgEditor()">✕</button>
+    </div>`).join('');
+}
+function openCjenovnik(){ renderPkgEditor(); $('pkgPph').value=pricePerHour||''; $('pkgOv').classList.add('show'); }
+$('pz_pkgBtn').onclick=openCjenovnik;
+$('cjenovnikBtn').onclick=openCjenovnik;
+$('pkgAdd').onclick=()=>{ packages.push({name:'Paket',minutes:60,price:3}); renderPkgEditor(); };
+$('pkgCancel').onclick=async()=>{ await loadPackages(); $('pkgOv').classList.remove('show'); };
+$('pkgSave').onclick=async()=>{ const pph=parseFloat($('pkgPph').value)||0; await api('/api/packages','POST',{packages,price_per_hour:pph}); pricePerHour=pph; $('pkgOv').classList.remove('show'); toast('Cjenovnik sačuvan'); load(); };
+
+// modal
+function openModal(s){
+  $('modalTitle').textContent = s?'Izmjena stanice':'Nova stanica';
+  $('f_id').value=s?s.id:''; $('f_name').value=s?s.name:''; $('f_control').value=s?s.control:'sony';
+  $('f_ip').value=s?s.ip:''; $('f_psk').value=s?s.psk:''; $('f_mac').value=s?s.mac:'';
+  $('f_on_url').value=s?s.on_url:''; $('f_off_url').value=s?s.off_url:''; $('f_price').value=s?(s.price_per_hour||''):'';
+  $('delBtn').style.display = s?'block':'none';
+  syncFields();
+  $('ov').classList.add('show');
+}
+function syncFields(){
+  const c=$('f_control').value;
+  const ipTypes=['sony','samsung','lg','roku'];
+  document.querySelectorAll('.only-ip').forEach(e=>e.style.display=ipTypes.includes(c)?'block':'none');
+  document.querySelectorAll('.only-sony').forEach(e=>e.style.display=(c==='sony')?'block':'none');
+  document.querySelectorAll('.only-http').forEach(e=>e.style.display=(c==='http')?'block':'none');
+  document.querySelectorAll('.only-pair').forEach(e=>e.style.display=(c==='samsung'||c==='lg')?'block':'none');
+  document.querySelectorAll('.only-pc').forEach(e=>e.style.display=(c==='pc')?'block':'none');
+}
+$('f_control').addEventListener('change',syncFields);
+// skeniranje mreže
+async function runScan(){
+  $('scanList').innerHTML='';
+  $('scanStatus').textContent='⏳ Skeniram cijelu mrežu (~10-15 sek)…';
+  try{
+    const r = await fetch('/api/discover');
+    const d = await r.json();
+    const devs = d.devices||[];
+    const tvs = devs.filter(x=>x.is_tv);
+    const other = devs.filter(x=>!x.is_tv);
+    if(!devs.length){ $('scanStatus').textContent='Ništa nije nađeno. Provjeri da je TV upaljen i na istoj mreži (Wi-Fi/LAN).'; return; }
+    $('scanStatus').textContent = `Nađeno ${tvs.length} TV/uređaj(a)` + (other.length?` (+${other.length} ostalo)`:'');
+    const card=(x)=>`<div style="border:1px solid var(--line2);border-radius:10px;padding:10px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700">${esc(x.name)} <span class="badge">${x.brand}</span></div>
+        <div class="hint" style="margin:2px 0 0">${x.ip}${x.mac?(' · '+x.mac):''}${x.model?(' · '+esc(x.model)):''}</div>
+      </div>
+      <button class="btn sm primary" onclick='addFromScan(${JSON.stringify(x).replace(/'/g,"&#39;")})'>Dodaj</button>
+    </div>`;
+    $('scanList').innerHTML =
+      (tvs.length?'<div class="hint" style="margin-bottom:6px;color:#fff">📺 TV-ovi</div>'+tvs.map(card).join(''):'') +
+      (other.length?'<div class="hint" style="margin:10px 0 6px">Ostali uređaji</div>'+other.map(card).join(''):'');
+  }catch(e){ $('scanStatus').textContent='Greška pri skeniranju: '+e.message; }
+}
+function addFromScan(x){
+  $('scanOv').classList.remove('show');
+  openModal(null);
+  $('f_name').value = x.name||'';
+  $('f_control').value = x.control||'sony';
+  $('f_ip').value = x.ip||'';
+  $('f_mac').value = x.mac||'';
+  syncFields();
+  toast('Popunjeno iz skeniranja — dodaj PSK ako je Sony pa Sačuvaj');
+}
+$('scanBtn').onclick=()=>{ $('scanOv').classList.add('show'); runScan(); };
+$('scanRefresh').onclick=runScan;
+$('scanClose').onclick=()=>$('scanOv').classList.remove('show');
+$('scanOv').onclick=(e)=>{if(e.target===$('scanOv'))$('scanOv').classList.remove('show');};
+
+$('addBtn').onclick=()=>openModal(null);
+$('cancelBtn').onclick=()=>$('ov').classList.remove('show');
+$('ov').onclick=(e)=>{if(e.target===$('ov'))$('ov').classList.remove('show');};
+function edit(id){ openModal(stations.find(s=>s.id===id)); }
+// init + periodično
+(async function init(){
+  await loadPackages();
+  await load();
+  refreshPazarBadge();
+  loadEnforce();
+  checkUpdate();
+  try{ const v=await (await fetch('/api/version')).json(); const sub=document.querySelector('.sub'); if(sub&&v.version) sub.textContent += ' · v'+v.version; }catch(e){}
+})();
+setInterval(refreshPazarBadge, 8000);
+
+// ── Auto-update ──
+async function checkUpdate(){
+  try{
+    const r=await fetch('/api/update/check'); const d=await r.json();
+    if(d.newer && d.url){
+      $('updateText').textContent=`Nova verzija ${d.latest} (imaš ${d.current})`;
+      $('updateNotes').textContent=((d.notes||'').split('\n')[0]||'').slice(0,110);
+      $('updateBar').dataset.url=d.url;
+      $('updateBar').style.display='flex';
+    }
+  }catch(e){}
+}
+$('updateBtn').onclick=async()=>{
+  if(!await askConfirm('Ažurirati program?','Preuzima se nova verzija i instalira. Program će se nakratko zatvoriti pa otvoriti.'))return;
+  $('updateBtn').textContent='Preuzimam…'; $('updateBtn').disabled=true;
+  try{ await api('/api/update/apply','POST',{url:$('updateBar').dataset.url});
+    toast('Preuzimam — instaler će se pokrenuti, prati ekran.');
+  }catch(e){ toast('Greška pri ažuriranju'); $('updateBtn').disabled=false; $('updateBtn').textContent='Ažuriraj sad'; }
+};
+$('updateClose').onclick=()=>$('updateBar').style.display='none';
+
+// ── Izađi iz programa ──
+$('quitBtn').onclick=async()=>{
+  if(!await askConfirm('Izaći iz programa?','Tajmeri prestaju da rade dok ponovo ne upališ program. Podaci ostaju sačuvani.'))return;
+  try{ await api('/api/quit','POST',{}); }catch(e){}
+  document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:20px;color:#aeb4c6;font-family:Manrope,sans-serif">Program zatvoren. Ovaj prozor možeš zatvoriti.</div>';
+};
+
+$('saveBtn').onclick=async()=>{
+  const body={id:$('f_id').value||undefined,name:$('f_name').value.trim()||'Stanica',
+    control:$('f_control').value,ip:$('f_ip').value.trim(),psk:$('f_psk').value.trim(),
+    mac:$('f_mac').value.trim(),on_url:$('f_on_url').value.trim(),off_url:$('f_off_url').value.trim(),
+    price_per_hour:parseFloat($('f_price').value)||0};
+  await api('/api/stations','POST',body);
+  $('ov').classList.remove('show'); toast('Sačuvano'); load();
+};
+// kraj init (gornji init() već poziva load + pakete)
+$('delBtn').onclick=async()=>{
+  const id=$('f_id').value; if(!id)return;
+  if(!await askConfirm('Obrisati ovu stanicu?','Trajno se uklanja iz liste.'))return;
+  await api(`/api/stations/${id}`,'DELETE'); $('ov').classList.remove('show'); load();
+};
+
+load();
+</script>
+</body>
+</html>
