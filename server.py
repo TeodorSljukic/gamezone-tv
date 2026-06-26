@@ -40,7 +40,7 @@ BASE = RES_DIR
 DATA_FILE = os.path.join(APP_DIR, "stations.json")
 PORT = 8770
 
-VERSION = "1.5.9"
+VERSION = "1.6.0"
 UPDATE_REPO = "TeodorSljukic/gamezone-tv"  # GitHub repo za auto-update
 
 _lock = threading.Lock()
@@ -1244,28 +1244,64 @@ def _ver_tuple(v):
     return tuple(parts[:3])
 
 
+def update_channel():
+    """Kanal ažuriranja:
+      - 'dev'  -> pokupi i PRE-RELEASE (za nas, testiranje)
+      - 'stable' (podrazumijevano) -> samo pravi release-ovi (za igraonice u radu)
+    Dev se uključi: env GAMEZONE_CHANNEL=dev  ILI fajl 'dev-channel' u APP_DIR."""
+    try:
+        if os.environ.get("GAMEZONE_CHANNEL", "").lower() in ("dev", "beta", "test"):
+            return "dev"
+        if os.path.exists(os.path.join(APP_DIR, "dev-channel")):
+            return "dev"
+    except Exception:
+        pass
+    return "stable"
+
+
+def _pick_asset(rel):
+    for a in rel.get("assets", []):
+        nm = a.get("name", "").lower()
+        if nm.endswith(".exe"):
+            url = a.get("browser_download_url", "")
+            if "setup" in nm:
+                return url
+    for a in rel.get("assets", []):
+        if a.get("name", "").lower().endswith(".exe"):
+            return a.get("browser_download_url", "")
+    return ""
+
+
 def check_update():
-    """Vrati info o najnovijoj verziji sa GitHub-a."""
-    url = f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest"
+    """Vrati info o najnovijoj verziji sa GitHub-a (po kanalu)."""
+    ch = update_channel()
+    if ch == "dev":
+        # Sve verzije (uklj. pre-release) -> uzmi najnoviju objavljenu
+        url = f"https://api.github.com/repos/{UPDATE_REPO}/releases?per_page=15"
+    else:
+        # Samo pravi release-ovi (GitHub /latest preskače pre-release)
+        url = f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest"
     req = urllib.request.Request(url, headers={
         "User-Agent": "GameZone-Updater",
         "Accept": "application/vnd.github+json",
     })
     with urllib.request.urlopen(req, timeout=8) as r:
-        d = json.loads(r.read().decode("utf-8", "ignore"))
-    latest = d.get("tag_name", "0.0.0")
-    notes = d.get("body", "") or ""
-    asset_url = ""
-    for a in d.get("assets", []):
-        nm = a.get("name", "").lower()
-        if nm.endswith(".exe"):
-            asset_url = a.get("browser_download_url", "")
-            if "setup" in nm:  # preferiraj installer
-                break
+        data = json.loads(r.read().decode("utf-8", "ignore"))
+
+    if ch == "dev":
+        rels = [x for x in data if not x.get("draft")]
+        rel = rels[0] if rels else {}
+    else:
+        rel = data
+
+    latest = rel.get("tag_name", "0.0.0")
+    notes = rel.get("body", "") or ""
+    asset_url = _pick_asset(rel)
     newer = _ver_tuple(latest) > _ver_tuple(VERSION)
     return {
         "current": VERSION, "latest": latest.lstrip("vV"),
         "newer": newer, "url": asset_url, "notes": notes[:500],
+        "channel": ch,
     }
 
 
