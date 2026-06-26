@@ -40,7 +40,7 @@ BASE = RES_DIR
 DATA_FILE = os.path.join(APP_DIR, "stations.json")
 PORT = 8770
 
-VERSION = "1.5.7"
+VERSION = "1.5.8"
 UPDATE_REPO = "TeodorSljukic/gamezone-tv"  # GitHub repo za auto-update
 
 _lock = threading.Lock()
@@ -322,30 +322,17 @@ def samsung_get_power(ip):
 
 
 def _samsung_wake(sid):
-    """Pozadinsko, pouzdano paljenje Samsunga BEZ blinka.
-    Pravilo protiv blinka: ako je TV (ili postane) UPALJEN -> NIKAD ne saljemo KEY_POWER.
-    KEY_POWER samo kao zadnja opcija, tek kad WoL ne uspije da ga probudi."""
+    """Paljenje Samsunga SAMO preko WoL-a (NIKAD KEY_POWER).
+    Razlog: ovaj model zna lazno da javi 'standby' i kad je TV UPALJEN. KEY_POWER je
+    toggle -> ako ga posaljemo upaljenom TV-u, UGASIMO ga (= blink na startu).
+    WoL ne moze da ugasi upaljen TV -> sigurno. Ako WoL ne probudi (WiFi), radnik pritisne daljinac."""
     with _lock:
         s = _state["stations"].get(sid)
         if not s:
             return
-        ip = s.get("ip", ""); mac = s.get("mac", ""); token = s.get("samsung_token", "")
-    if samsung_get_power(ip) == "on":
-        return  # vec upaljen -> NE DIRAJ (kljuc protiv blinka)
+        mac = s.get("mac", "")
     if mac:
-        wake_on_lan(mac)  # probudi NIC iz standby-ja (treba LAN kabl / 'Power On with Mobile')
-    # sacekaj da WoL probudi; cim javi 'on' -> gotovo (ne toggluj)
-    for _ in range(6):
-        time.sleep(1.0)
-        if samsung_get_power(ip) == "on":
-            return
-    # i dalje nedostupan -> jedan KEY_POWER pokusaj (radi ako je mreza ziva/LAN kabl)
-    ok, ntok, _ = samsung_power_toggle(ip, token)
-    if ntok:
-        with _lock:
-            s = _state["stations"].get(sid)
-            if s:
-                s["samsung_token"] = ntok
+        wake_on_lan(mac)
 
 
 def _samsung_off(sid):
