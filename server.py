@@ -46,7 +46,7 @@ BASE = RES_DIR
 DATA_FILE = os.path.join(APP_DIR, "stations.json")
 PORT = int(os.environ.get("GAMEZONE_PORT", "8770"))
 
-VERSION = "1.6.0"
+VERSION = "1.7.0"
 UPDATE_REPO = "TeodorSljukic/gamezone-tv"  # GitHub repo za auto-update
 
 _lock = threading.Lock()
