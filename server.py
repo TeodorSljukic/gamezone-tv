@@ -40,7 +40,7 @@ BASE = RES_DIR
 DATA_FILE = os.path.join(APP_DIR, "stations.json")
 PORT = 8770
 
-VERSION = "1.5.5"
+VERSION = "1.5.6"
 UPDATE_REPO = "TeodorSljukic/gamezone-tv"  # GitHub repo za auto-update
 
 _lock = threading.Lock()
@@ -309,16 +309,16 @@ def samsung_power_toggle(ip, token):
 
 def samsung_get_power(ip):
     """Samsung Tizen — procitaj stanje (on/standby) preko REST device info.
-    Vraca 'on' / 'standby' / '' (nepoznato). Bez ovoga KEY_POWER bi mogao da UPALI."""
-    status, raw = _http(f"http://{ip}:8001/api/v2/", timeout=2)
-    if not (200 <= status < 300):
-        return ""
+    Vraca 'on' / 'standby' / '' (nepoznato/nedostupno). NIKAD ne puca."""
     try:
+        status, raw = _http(f"http://{ip}:8001/api/v2/", timeout=2)
+        if not (200 <= status < 300):
+            return ""
         d = json.loads(raw.decode("utf-8", "ignore"))
         ps = d.get("device", {}).get("PowerState", "")
         return str(ps).lower()
     except Exception:
-        return ""
+        return ""  # nedostupan/timeout (TV ugasen) -> tretiramo kao 'nije on'
 
 
 def _samsung_wake(sid):
@@ -349,25 +349,39 @@ def _samsung_wake(sid):
 
 
 def _samsung_off(sid):
-    """Pozadinsko gašenje Samsunga: KEY_POWER samo ako je stvarno upaljen.
-    KEY_POWER je TOGGLE -> poslije slanja TV se par sekundi i dalje javlja kao 'on'.
-    Zato COOLDOWN: 9s ne diramo TV (inace bi ga ponovo upalio = pali/gasi ciklus)."""
+    """Cycle-proof gašenje Samsunga (KEY_POWER je TOGGLE -> opasnost od pali/gasi).
+    Zaštite: (1) dupla provjera 'on' (ignoriše prelaz), (2) cooldown poslije slanja,
+    (3) backoff — ako se TV uporno ne gasi, pauza raste (9s,18s,... do 5min) da ne trešti."""
     with _lock:
         s = _state["stations"].get(sid)
         if not s:
             return
         if s.get("_samsung_cd", 0) > time.time():
-            return  # cooldown: tek smo poslali KEY_POWER, pusti TV da se ugasi
+            return  # cooldown
         ip = s.get("ip", ""); token = s.get("samsung_token", "")
+        fails = int(s.get("_samsung_fails", 0))
+    # Dupla provjera: mora biti 'on' DVA puta zaredom (da ne reagujemo na prelaz/lažno)
     if samsung_get_power(ip) != "on":
-        return  # vec ugasen / nedostupan — ne toggluj (da ga ne UPALI)
+        if fails:
+            with _lock:
+                s = _state["stations"].get(sid)
+                if s:
+                    s["_samsung_fails"] = 0  # TV se ugasio -> resetuj backoff
+        return
+    time.sleep(1.5)
+    if samsung_get_power(ip) != "on":
+        return  # bio prelaz, nije stabilno upaljen -> ne diraj
+    # Stvarno je upaljen -> ugasi
     ok, ntok, _ = samsung_power_toggle(ip, token)
+    fails += 1
+    cd = min(9 * (2 ** (fails - 1)), 300)  # 9s,18s,36s,72s... do 5 min
     with _lock:
         s = _state["stations"].get(sid)
         if s:
             if ntok:
                 s["samsung_token"] = ntok
-            s["_samsung_cd"] = time.time() + 9  # ne diraj 9s (da se stvarno ugasi)
+            s["_samsung_cd"] = time.time() + cd
+            s["_samsung_fails"] = fails
 
 
 def _samsung_input(sid, want_game):
